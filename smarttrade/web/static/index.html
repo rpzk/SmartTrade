@@ -66,9 +66,12 @@
   <section>
     <h2>Perp • Klines</h2>
     <div id="swap-klines-error" class="error"></div>
-    <pre id="swap-klines">Carregando…</pre>
+    <canvas id="chart" height="220"></canvas>
+    <pre id="swap-klines" style="margin-top: 0.5rem;">Carregando…</pre>
   </section>
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@3.3.0/dist/chartjs-chart-financial.min.js"></script>
   <script>
     const $ = (id) => document.getElementById(id);
 
@@ -79,6 +82,35 @@
     }
 
     function fmt(obj) { return JSON.stringify(obj, null, 2); }
+
+    let ws;
+    let chart;
+
+    function upsertCandle(dataset, c) {
+      const t = c.time;
+      const foundIdx = dataset.findIndex(x => x.x === t);
+      const point = { x: t, o: +c.open, h: +c.high, l: +c.low, c: +c.close };
+      if (foundIdx >= 0) dataset[foundIdx] = point; else dataset.push(point);
+      dataset.sort((a,b) => a.x - b.x);
+    }
+
+    function ensureChart() {
+      if (chart) return chart;
+      const ctx = document.getElementById('chart');
+      chart = new Chart(ctx, {
+        type: 'candlestick',
+        data: { datasets: [{ label: 'Perp Klines', data: [] }] },
+        options: {
+          parsing: false,
+          plugins: { legend: { display: true } },
+          scales: {
+            x: { type: 'time', time: { unit: 'minute' }},
+            y: { beginAtZero: false }
+          }
+        }
+      });
+      return chart;
+    }
 
     async function loadAll() {
       const symbol = $("symbol").value;
@@ -103,11 +135,14 @@
         $("swap-ticker-error").textContent = e.message;
       }
 
-      // Swap klines
+      // Swap klines (REST) - snapshot JSON abaixo do gráfico
       try {
         $("swap-klines-error").textContent = "";
         const kl = await getJSON(`/api/swap/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${encodeURIComponent(limit)}`);
         $("swap-klines").textContent = fmt(kl);
+        const ch = ensureChart();
+        ch.data.datasets[0].data = kl.map(c => ({ x: c.time, o: +c.open, h: +c.high, l: +c.low, c: +c.close }));
+        ch.update();
       } catch (e) {
         $("swap-klines-error").textContent = e.message;
       }
@@ -126,9 +161,37 @@
     }
     $("auto").addEventListener("change", setupAuto);
 
-    // Primeiro load + ativa auto
+    // WebSocket live updates para klines (streaming via servidor)
+    function connectWS() {
+      if (ws) { try { ws.close(); } catch (_) {} }
+      const symbol = $("symbol").value;
+      const interval = $("interval").value;
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const url = `${proto}://${location.host}/ws/swap/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}`;
+      ws = new WebSocket(url);
+      ws.onopen = () => { /* ok */ };
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg.type === 'snapshot') {
+            const ch = ensureChart();
+            ch.data.datasets[0].data = (msg.data || []).map(c => ({ x: c.time, o: +c.open, h: +c.high, l: +c.low, c: +c.close }));
+            ch.update();
+          } else if (msg.type === 'kline') {
+            const ch = ensureChart();
+            upsertCandle(ch.data.datasets[0].data, msg.data);
+            ch.update();
+          }
+        } catch (e) { /* ignore */ }
+      };
+      ws.onclose = () => { setTimeout(connectWS, 1500); };
+      ws.onerror = () => { try { ws.close(); } catch (_) {} };
+    }
+
+    // Primeiro load + ativa auto e WS
     loadAll();
     setupAuto();
+    connectWS();
   </script>
 </body>
 </html>

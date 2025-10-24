@@ -45,6 +45,12 @@ Acesse em http://localhost:8000 e escolha o símbolo/intervalo. A página faz po
 - GET /api/swap/ticker?symbol=BTC-USDT
 - GET /api/swap/klines?symbol=BTC-USDT&interval=1m&limit=10
 
+Além disso, há streaming via WebSocket do servidor para klines (sem mock):
+
+- WS /ws/swap/klines?symbol=BTC-USDT&interval=1m
+
+A UI renderiza candles com Chart.js (plugin financial) e atualiza em tempo real.
+
 ## Notas
 
 - Alguns endpoints públicos da BingX exigem o parâmetro `timestamp` (ms), mas não requerem assinatura para leitura de market data.
