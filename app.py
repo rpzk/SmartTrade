@@ -36,8 +36,9 @@ def get_price(symbol):
             return jsonify(result), 500
         return jsonify(result)
     except Exception as e:
+        app.logger.error(f"Error fetching price for {symbol}: {str(e)}")
         return jsonify({
-            'error': str(e),
+            'error': 'API request failed',
             'success': False,
             'message': 'Failed to fetch real data from BingX'
         }), 500
@@ -55,8 +56,9 @@ def get_ticker(symbol):
             return jsonify(result), 500
         return jsonify(result)
     except Exception as e:
+        app.logger.error(f"Error fetching ticker for {symbol}: {str(e)}")
         return jsonify({
-            'error': str(e),
+            'error': 'API request failed',
             'success': False,
             'message': 'Failed to fetch real ticker data from BingX'
         }), 500
@@ -155,8 +157,9 @@ def get_chart_data(symbol):
             }), 404
             
     except Exception as e:
+        app.logger.error(f"Error fetching chart data for {symbol}: {str(e)}")
         return jsonify({
-            'error': str(e),
+            'error': 'API request failed',
             'success': False,
             'message': 'Failed to fetch real chart data from BingX'
         }), 500
@@ -174,8 +177,9 @@ def get_trading_pairs():
             return jsonify(result), 500
         return jsonify(result)
     except Exception as e:
+        app.logger.error(f"Error fetching trading pairs: {str(e)}")
         return jsonify({
-            'error': str(e),
+            'error': 'API request failed',
             'success': False,
             'message': 'Failed to fetch trading pairs from BingX'
         }), 500
@@ -194,8 +198,9 @@ def get_balance():
             return jsonify(result), 500
         return jsonify(result)
     except Exception as e:
+        app.logger.error(f"Error fetching balance: {str(e)}")
         return jsonify({
-            'error': str(e),
+            'error': 'API request failed',
             'success': False,
             'message': 'Failed to fetch account balance from BingX'
         }), 500
@@ -214,8 +219,9 @@ def get_orders():
             return jsonify(result), 500
         return jsonify(result)
     except Exception as e:
+        app.logger.error(f"Error fetching orders: {str(e)}")
         return jsonify({
-            'error': str(e),
+            'error': 'API request failed',
             'success': False,
             'message': 'Failed to fetch orders from BingX'
         }), 500
@@ -250,19 +256,27 @@ def place_trade():
         
         return jsonify(result)
     except Exception as e:
+        app.logger.error(f"Error placing order: {str(e)}")
         return jsonify({
-            'error': str(e),
+            'error': 'Order placement failed',
             'success': False,
             'message': 'Failed to place order on BingX'
         }), 500
 
 
 if __name__ == '__main__':
+    import os
+    
+    # Only enable debug in development environment
+    debug_mode = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
+    
     print("=" * 60)
     print("🚀 Starting SmartTrade Application...")
     print("=" * 60)
     print("📊 Dashboard: http://localhost:5000")
     print("⚠️  NO MOCK DATA - All data from BingX API")
     print("⚠️  NO SIMULATED TRADING - All trades are REAL")
+    if debug_mode:
+        print("⚠️  DEBUG MODE ENABLED - For development only!")
     print("=" * 60)
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=debug_mode, host='0.0.0.0', port=5000)
