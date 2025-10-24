@@ -1,0 +1,29 @@
+#!/bin/bash
+# Pre-commit hook to validate no mock data policy
+# 
+# Para instalar este hook:
+# cp .git-hooks/pre-commit .git/hooks/pre-commit
+# chmod +x .git/hooks/pre-commit
+
+echo "🔍 Validando política de dados reais..."
+
+# Executar validador
+python3 validate_no_mock_data.py
+
+# Verificar resultado
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "❌ COMMIT BLOQUEADO!"
+    echo "⚠️  Seu código contém violações da política de dados reais"
+    echo "📖 Consulte DATA_POLICY.md para mais informações"
+    echo ""
+    echo "Para corrigir:"
+    echo "  1. Remova todos os dados simulados/mockados"
+    echo "  2. Use apenas dados reais da API BingX"
+    echo "  3. Execute 'python3 validate_no_mock_data.py' novamente"
+    echo ""
+    exit 1
+fi
+
+echo "✅ Validação bem-sucedida! Prosseguindo com commit..."
+exit 0
