@@ -1,6 +1,6 @@
 # 🚫 NO MOCKUPS GUARANTEE
 
-## Garantia: Nada de Mockups / No Mock Data Guarantee
+## Garantía: Nada de Mockups / No Mock Data Guarantee
 
 This document certifies that **SmartTrade** application follows a strict **NO MOCKUPS** policy.
 
@@ -35,8 +35,9 @@ This document certifies that **SmartTrade** application follows a strict **NO MO
 
 ```
 User Request → Flask App → BingX API Client → BingX REST API → Real Data
-                                               ↓
-                                          Error if fails
+                                               │
+                                               ↓ (if error)
+                                          Error Response
                                      (NO mock fallback)
 ```
 
@@ -223,6 +224,5 @@ No simulations, no demos, no fake data.
 
 ---
 
-*Last updated: 2025-10-24*  
 *Version: 1.0*  
 *Compliance: Strict No Mockups Policy*
