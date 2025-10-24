@@ -46,8 +46,9 @@ O projeto inclui workflow GitHub Actions que valida automaticamente cada PR para
 
 ## 📚 Documentação
 
+- **[GUIA_RAPIDO.md](GUIA_RAPIDO.md)** - ⚡ Guia rápido com exemplos práticos
 - **[DATA_POLICY.md](DATA_POLICY.md)** - Política completa sobre uso de dados reais
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Guia de contribuição com exemplos práticos
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Guia de contribuição detalhado
 - **[.no-mock-data](.no-mock-data)** - Configuração de padrões proibidos
 
 ## 🔍 Para Desenvolvedores
