@@ -7,14 +7,16 @@ import logging
 from typing import Any, Dict, Optional
 from datetime import datetime, timedelta
 
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect, Response
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
 from ..bingx_client import BingXClient, BingXError, BingXAPIError
 from ..config import app_config, web_config
+from prometheus_client import generate_latest, CollectorRegistry, CONTENT_TYPE_LATEST
+from prometheus_client import Counter, Histogram
 
 # Configurar logging
 logging.basicConfig(
@@ -87,6 +89,10 @@ async def shutdown_event():
 
 # Cache simples em memória com TTL
 _cache: Dict[str, tuple[Any, datetime]] = {}
+
+# Prometheus metrics (basic)
+REQUEST_COUNT = Counter('smarttrade_http_requests_total', 'Total HTTP requests', ['endpoint', 'status'])
+REQUEST_DURATION = Histogram('smarttrade_http_request_duration_seconds', 'HTTP request duration', ['endpoint'])
 
 
 def get_cached(key: str) -> Optional[Any]:
@@ -162,6 +168,19 @@ def health() -> Dict[str, Any]:
         "cache_size": len(_cache),
         "version": "0.3.0"
     }
+
+
+@app.get("/metrics")
+def metrics() -> Response:
+    """Expor métricas Prometheus"""
+    try:
+        registry = CollectorRegistry()
+        # generate_latest without registry uses default registry; using default is fine for basic setup
+        data = generate_latest()
+        return PlainTextResponse(content=data.decode('utf-8'), media_type=CONTENT_TYPE_LATEST)
+    except Exception as e:
+        logger.error(f"Metrics error: {e}")
+        raise HTTPException(status_code=500, detail="Metrics unavailable")
 
 
 @app.get("/api/ping")
