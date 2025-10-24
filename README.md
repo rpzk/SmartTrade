@@ -44,6 +44,9 @@ BINGX_BASE_URL=https://open-api.bingx.com
 
 ## 🎯 Como Usar
 
+### Modo Demo (sem API keys)
+O aplicativo pode ser executado em modo demo sem necessidade de configurar API keys:
+
 1. Inicie o aplicativo:
 ```bash
 python app.py
@@ -54,12 +57,19 @@ python app.py
 http://localhost:5000
 ```
 
-3. Use a interface para:
-   - Visualizar gráficos de preços em tempo real
-   - Monitorar estatísticas de mercado
-   - Executar ordens de compra e venda
-   - Alternar entre diferentes pares de trading
-   - Ajustar intervalos de tempo dos gráficos
+O aplicativo detectará automaticamente que não há API keys configuradas e usará dados simulados. Perfeito para testar a interface!
+
+### Modo Real (com API keys)
+Para usar com dados reais da BingX, configure suas credenciais conforme a seção de Instalação.
+
+### Funcionalidades Disponíveis
+Use a interface para:
+- Visualizar gráficos de preços em tempo real (candlestick + volume)
+- Monitorar estatísticas de mercado (preço atual, alta/baixa 24h, volume)
+- Executar ordens de compra e venda
+- Alternar entre diferentes pares de trading (BTC, ETH, BNB, SOL, XRP)
+- Ajustar intervalos de tempo dos gráficos (1m, 5m, 15m, 30m, 1h, 4h, 1d)
+- Ativar auto-refresh para atualização automática a cada 30 segundos
 
 ## 📊 Funcionalidades
 
@@ -94,12 +104,19 @@ http://localhost:5000
 SmartTrade/
 ├── app.py              # Aplicação Flask principal
 ├── bingx_api.py        # Cliente da API BingX
+├── demo_mode.py        # Gerador de dados simulados
 ├── requirements.txt    # Dependências Python
 ├── .env.example        # Exemplo de configuração
 ├── templates/
-│   └── index.html     # Interface web
+│   └── index.html     # Interface web moderna
 └── README.md          # Documentação
 ```
+
+## 📸 Screenshots
+
+![SmartTrade Dashboard](https://github.com/user-attachments/assets/64fd570f-22fe-418d-8336-ad1cf62c4dbe)
+
+*Dashboard moderno com gráficos interativos, estatísticas em tempo real e controles de trading*
 
 ## 🛠️ Tecnologias Utilizadas
 

@@ -180,7 +180,22 @@ def place_trade():
         return jsonify({'error': str(e), 'success': False}), 500
 
 
+@app.route('/api/status')
+def get_status():
+    """Get application status"""
+    return jsonify({
+        'status': 'running',
+        'demo_mode': bingx.demo_mode,
+        'version': '1.0.0'
+    })
+
+
 if __name__ == '__main__':
     print("🚀 Starting SmartTrade Application...")
     print("📊 Dashboard will be available at: http://localhost:5000")
+    if bingx.demo_mode:
+        print("⚠️  DEMO MODE ACTIVE - Using simulated data")
+        print("💡 To use real trading, configure API keys in .env file")
+    else:
+        print("✅ Connected to BingX API")
     app.run(debug=True, host='0.0.0.0', port=5000)

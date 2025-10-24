@@ -268,6 +268,9 @@
     <div class="header">
         <h1>📊 SmartTrade</h1>
         <p>Trading moderno e funcional com BingX</p>
+        <div id="demoModeBadge" style="display: none; margin-top: 10px; padding: 8px 15px; background: #ff9800; color: white; border-radius: 5px; display: inline-block; font-weight: 600;">
+            ⚠️ MODO DEMO - Dados simulados
+        </div>
     </div>
 
     <div class="container">
@@ -488,7 +491,21 @@
             }
         }
 
+        async function checkDemoMode() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                
+                if (data.demo_mode) {
+                    document.getElementById('demoModeBadge').style.display = 'inline-block';
+                }
+            } catch (error) {
+                console.error('Error checking demo mode:', error);
+            }
+        }
+
         // Initial load
+        checkDemoMode();
         refreshData();
     </script>
 </body>
