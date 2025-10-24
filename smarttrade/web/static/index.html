@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SmartTrade • BingX</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; }
+    header { display: flex; align-items: baseline; gap: 1rem; }
+    .row { display: flex; gap: 1rem; flex-wrap: wrap; }
+    section { border: 1px solid #ddd; border-radius: 8px; padding: 1rem; margin-top: 1rem; }
+    pre { background: #f7f7f7; padding: 0.75rem; border-radius: 6px; overflow: auto; }
+    label { font-weight: 600; }
+    .muted { color: #666; }
+    .error { color: #b00020; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>SmartTrade</h1>
+    <span class="muted">BingX • dados reais (sem mock)</span>
+  </header>
+
+  <div class="row">
+    <div>
+      <label for="symbol">Símbolo:</label>
+      <select id="symbol">
+        <option>BTC-USDT</option>
+        <option>ETH-USDT</option>
+        <option>SOL-USDT</option>
+      </select>
+    </div>
+    <div>
+      <label for="interval">Intervalo (perp klines):</label>
+      <select id="interval">
+        <option>1m</option>
+        <option>5m</option>
+        <option>15m</option>
+        <option>1h</option>
+        <option>4h</option>
+        <option>1d</option>
+      </select>
+    </div>
+    <div>
+      <label for="limit">Limite:</label>
+      <input id="limit" type="number" min="1" max="200" value="10" />
+    </div>
+    <div>
+      <button id="refresh">Atualizar agora</button>
+      <label class="muted"><input type="checkbox" id="auto" checked /> Auto (5s)</label>
+    </div>
+  </div>
+
+  <section>
+    <h2>Spot • Ticker 24h</h2>
+    <div id="spot-error" class="error"></div>
+    <pre id="spot">Carregando…</pre>
+  </section>
+
+  <section>
+    <h2>Perp • Ticker</h2>
+    <div id="swap-ticker-error" class="error"></div>
+    <pre id="swap-ticker">Carregando…</pre>
+  </section>
+
+  <section>
+    <h2>Perp • Klines</h2>
+    <div id="swap-klines-error" class="error"></div>
+    <pre id="swap-klines">Carregando…</pre>
+  </section>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    async function getJSON(url) {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      return await r.json();
+    }
+
+    function fmt(obj) { return JSON.stringify(obj, null, 2); }
+
+    async function loadAll() {
+      const symbol = $("symbol").value;
+      const interval = $("interval").value;
+      const limit = $("limit").value;
+
+      // Spot ticker
+      try {
+        $("spot-error").textContent = "";
+        const spot = await getJSON(`/api/spot/ticker?symbol=${encodeURIComponent(symbol)}`);
+        $("spot").textContent = fmt(spot);
+      } catch (e) {
+        $("spot-error").textContent = e.message;
+      }
+
+      // Swap ticker
+      try {
+        $("swap-ticker-error").textContent = "";
+        const st = await getJSON(`/api/swap/ticker?symbol=${encodeURIComponent(symbol)}`);
+        $("swap-ticker").textContent = fmt(st);
+      } catch (e) {
+        $("swap-ticker-error").textContent = e.message;
+      }
+
+      // Swap klines
+      try {
+        $("swap-klines-error").textContent = "";
+        const kl = await getJSON(`/api/swap/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${encodeURIComponent(limit)}`);
+        $("swap-klines").textContent = fmt(kl);
+      } catch (e) {
+        $("swap-klines-error").textContent = e.message;
+      }
+    }
+
+    $("refresh").addEventListener("click", loadAll);
+    ["symbol","interval","limit"].forEach(id => $(id).addEventListener("change", loadAll));
+
+    let timer = null;
+    function setupAuto() {
+      if ($("auto").checked) {
+        if (!timer) timer = setInterval(loadAll, 5000);
+      } else {
+        if (timer) { clearInterval(timer); timer = null; }
+      }
+    }
+    $("auto").addEventListener("change", setupAuto);
+
+    // Primeiro load + ativa auto
+    loadAll();
+    setupAuto();
+  </script>
+</body>
+</html>
