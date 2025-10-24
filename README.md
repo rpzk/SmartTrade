@@ -114,7 +114,10 @@ A interface web expõe os seguintes endpoints REST:
 - `GET /api/ping` - Ping simples
 - `GET /api/spot/ticker?symbol=BTC-USDT` - Ticker spot 24h
 - `GET /api/swap/ticker?symbol=BTC-USDT` - Ticker perpétuo
-- `GET /api/swap/klines?symbol=BTC-USDT&interval=1m&limit=20` - Klines
+- `GET /api/swap/klines?symbol=BTC-USDT&interval=1m&limit=20` - Klines (salvos automaticamente)
+- `GET /api/history/klines?symbol=BTC-USDT&interval=1m&limit=100` - Histórico de klines do banco local
+- `GET /api/history/stats?symbol=BTC-USDT&interval=1m` - Estatísticas do histórico armazenado
+- `GET /metrics` - Métricas Prometheus (para monitoramento)
 
 ### WebSocket
 
@@ -156,6 +159,7 @@ smarttrade/
 ├── bingx_client.py       # Cliente HTTP com retry e rate limiting
 ├── config.py             # Configurações via Pydantic Settings
 ├── models.py             # Modelos de validação de dados
+├── storage.py            # Persistência SQLite para histórico
 ├── main.py              # CLI para uso via terminal
 └── web/
     ├── app.py           # FastAPI application
@@ -193,6 +197,22 @@ Streaming otimizado de klines:
 - Polling dinâmico baseado no intervalo (1m = 5s, 1h = 60s, etc)
 - Snapshot inicial + updates incrementais
 - Reconexão automática em caso de erro
+
+#### Persistência de Dados
+
+Sistema de storage SQLite integrado:
+- Salva automaticamente todos os klines consultados
+- Endpoints de histórico para consultar dados locais
+- Estatísticas de armazenamento
+- Ideal para análises e backtesting sem chamadas adicionais à API
+
+#### Observabilidade
+
+Métricas Prometheus exportadas em `/metrics`:
+- `smarttrade_http_requests_total` - Total de requisições HTTP
+- `smarttrade_http_request_duration_seconds` - Latência das requisições
+- `smarttrade_cache_hits_total` / `smarttrade_cache_misses_total` - Performance do cache
+- `smarttrade_active_websockets` - Conexões WebSocket ativas
 
 ## 📖 Endpoints da BingX Utilizados
 
