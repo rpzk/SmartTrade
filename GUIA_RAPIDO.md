@@ -96,15 +96,19 @@ Workflow GitHub Actions valida automaticamente cada PR.
 
 ## 🔍 Exemplos Práticos
 
+**Nota:** Os exemplos abaixo são ilustrativos. Adapte os nomes de métodos e módulos conforme a implementação real da sua API BingX.
+
 ### Correto: Obter Preço Atual
 
 ```python
-from bingx_api import BingXAPI
+# Exemplo ilustrativo - adapte para sua implementação
+from bingx_api import BingXAPI  # Nome do seu módulo de API
 
 api = BingXAPI()
 
 def get_current_price(symbol):
-    """Obtém preço atual da API BingX"""
+    """Obtém preço atual da API BingX (exemplo)"""
+    # Use os métodos reais da sua implementação de API
     result = api.get_market_price(symbol)
     if 'error' in result:
         return None
@@ -114,8 +118,10 @@ def get_current_price(symbol):
 ### Correto: Obter Dados de Gráfico
 
 ```python
+# Exemplo ilustrativo - adapte para sua implementação
 def get_chart_data(symbol, interval='1h'):
-    """Obtém dados históricos reais para gráfico"""
+    """Obtém dados históricos reais para gráfico (exemplo)"""
+    # Use os métodos reais da sua implementação de API
     result = api.get_kline_data(symbol, interval, limit=100)
     if 'error' in result:
         raise APIError(f"Falha ao obter dados: {result['error']}")
@@ -125,9 +131,11 @@ def get_chart_data(symbol, interval='1h'):
 ### Correto: Tratamento de Erro
 
 ```python
+# Exemplo ilustrativo - adapte para sua implementação
 def place_order_safe(symbol, side, quantity):
-    """Coloca ordem com tratamento de erro apropriado"""
+    """Coloca ordem com tratamento de erro apropriado (exemplo)"""
     try:
+        # Use os métodos reais da sua implementação de API
         result = api.place_order(symbol, side, quantity)
         return result
     except ConnectionError:
