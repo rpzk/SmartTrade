@@ -31,7 +31,8 @@ def get_price(symbol):
         result = bingx.get_market_price(symbol)
         return jsonify(result)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        app.logger.error(f"Error getting price for {symbol}: {str(e)}")
+        return jsonify({'error': 'Failed to retrieve price data', 'success': False}), 500
 
 
 @app.route('/api/ticker/<symbol>')
@@ -41,7 +42,8 @@ def get_ticker(symbol):
         result = bingx.get_24h_ticker(symbol)
         return jsonify(result)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        app.logger.error(f"Error getting ticker for {symbol}: {str(e)}")
+        return jsonify({'error': 'Failed to retrieve ticker data', 'success': False}), 500
 
 
 @app.route('/api/chart/<symbol>')
@@ -126,7 +128,8 @@ def get_chart_data(symbol):
             return jsonify({'error': 'No data available', 'success': False}), 404
             
     except Exception as e:
-        return jsonify({'error': str(e), 'success': False}), 500
+        app.logger.error(f"Error getting chart data for {symbol}: {str(e)}")
+        return jsonify({'error': 'Failed to retrieve chart data', 'success': False}), 500
 
 
 @app.route('/api/pairs')
@@ -136,7 +139,8 @@ def get_trading_pairs():
         result = bingx.get_trading_pairs()
         return jsonify(result)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        app.logger.error(f"Error getting trading pairs: {str(e)}")
+        return jsonify({'error': 'Failed to retrieve trading pairs', 'success': False}), 500
 
 
 @app.route('/api/balance')
@@ -146,7 +150,8 @@ def get_balance():
         result = bingx.get_account_balance()
         return jsonify(result)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        app.logger.error(f"Error getting balance: {str(e)}")
+        return jsonify({'error': 'Failed to retrieve balance', 'success': False}), 500
 
 
 @app.route('/api/orders', methods=['GET'])
@@ -157,7 +162,8 @@ def get_orders():
         result = bingx.get_open_orders(symbol)
         return jsonify(result)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        app.logger.error(f"Error getting orders: {str(e)}")
+        return jsonify({'error': 'Failed to retrieve orders', 'success': False}), 500
 
 
 @app.route('/api/trade', methods=['POST'])
@@ -177,7 +183,8 @@ def place_trade():
         result = bingx.place_order(symbol, side, quantity, price, order_type)
         return jsonify(result)
     except Exception as e:
-        return jsonify({'error': str(e), 'success': False}), 500
+        app.logger.error(f"Error placing trade: {str(e)}")
+        return jsonify({'error': 'Failed to execute trade', 'success': False}), 500
 
 
 @app.route('/api/status')
@@ -191,6 +198,8 @@ def get_status():
 
 
 if __name__ == '__main__':
+    import os
+    
     print("🚀 Starting SmartTrade Application...")
     print("📊 Dashboard will be available at: http://localhost:5000")
     if bingx.demo_mode:
@@ -198,4 +207,11 @@ if __name__ == '__main__':
         print("💡 To use real trading, configure API keys in .env file")
     else:
         print("✅ Connected to BingX API")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    
+    # Only enable debug mode if explicitly set in environment
+    # For production, set FLASK_ENV=production or don't set DEBUG at all
+    debug_mode = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
+    if debug_mode:
+        print("⚠️  WARNING: Debug mode is enabled. Disable in production!")
+    
+    app.run(debug=debug_mode, host='0.0.0.0', port=5000)
