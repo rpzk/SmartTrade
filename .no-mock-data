@@ -1,0 +1,34 @@
+# SmartTrade - No Mock Data Configuration
+# This file enforces the policy that NO simulated/mock data should be used
+
+# Prohibited patterns that indicate mock/simulated data
+PROHIBITED_PATTERNS:
+  - "mock_data"
+  - "fake_data"
+  - "simulated_"
+  - "dummy_data"
+  - "sample_data"
+  - "test_data" (in production code)
+  - "random.uniform" (for price generation)
+  - "random.randint" (for volume generation)
+  - "DEMO_MODE"
+  - "SIMULATION_MODE"
+
+# Required for all data sources
+REQUIREMENTS:
+  - All market data must come from BingX API
+  - API responses must be validated for authenticity
+  - No hardcoded prices or volumes in production code
+  - Timestamps must be from API, not generated locally
+  - Error states must not fallback to mock data
+
+# Allowed exceptions
+ALLOWED:
+  - Unit test fixtures (in test files only)
+  - Development environment configuration examples
+  - Documentation examples (clearly marked)
+
+# This policy is enforced at:
+# - Code review
+# - CI/CD pipeline
+# - Runtime validation
