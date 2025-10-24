@@ -125,20 +125,40 @@ async def shutdown_event():
 # Cache simples em memória com TTL
 _cache: Dict[str, tuple[Any, datetime]] = {}
 
-# Prometheus metrics
-REQUEST_COUNT = Counter(
+# Prometheus metrics - evitar duplicação em reload
+from prometheus_client import REGISTRY
+
+def _get_or_create_counter(name, doc, labels):
+    """Helper para obter contador existente ou criar novo"""
+    if name in REGISTRY._names_to_collectors:
+        return REGISTRY._names_to_collectors[name]
+    return Counter(name, doc, labels)
+
+def _get_or_create_histogram(name, doc, labels):
+    """Helper para obter histograma existente ou criar novo"""
+    if name in REGISTRY._names_to_collectors:
+        return REGISTRY._names_to_collectors[name]
+    return Histogram(name, doc, labels)
+
+def _get_or_create_gauge(name, doc):
+    """Helper para obter gauge existente ou criar novo"""
+    if name in REGISTRY._names_to_collectors:
+        return REGISTRY._names_to_collectors[name]
+    return Gauge(name, doc)
+
+REQUEST_COUNT = _get_or_create_counter(
     'smarttrade_http_requests_total',
     'Total HTTP requests',
     ['method', 'endpoint', 'status']
 )
-REQUEST_DURATION = Histogram(
+REQUEST_DURATION = _get_or_create_histogram(
     'smarttrade_http_request_duration_seconds',
     'HTTP request duration',
     ['method', 'endpoint']
 )
-CACHE_HITS = Counter('smarttrade_cache_hits_total', 'Total cache hits', ['endpoint'])
-CACHE_MISSES = Counter('smarttrade_cache_misses_total', 'Total cache misses', ['endpoint'])
-ACTIVE_WEBSOCKETS = Gauge('smarttrade_active_websockets', 'Active WebSocket connections')
+CACHE_HITS = _get_or_create_counter('smarttrade_cache_hits_total', 'Total cache hits', ['endpoint'])
+CACHE_MISSES = _get_or_create_counter('smarttrade_cache_misses_total', 'Total cache misses', ['endpoint'])
+ACTIVE_WEBSOCKETS = _get_or_create_gauge('smarttrade_active_websockets', 'Active WebSocket connections')
 
 
 def get_cached(key: str) -> Optional[Any]:
