@@ -1,0 +1,39 @@
+name: Validate No Mock Data Policy
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  validate-data-policy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+        
+    - name: Validate No Mock Data Policy
+      run: |
+        echo "🔍 Validando política de dados reais..."
+        python3 validate_no_mock_data.py
+        
+    - name: Check validation result
+      if: failure()
+      run: |
+        echo "❌ FALHA: Código contém dados simulados/mockados!"
+        echo "📖 Consulte DATA_POLICY.md para mais informações"
+        echo "⚠️  Este projeto NÃO deve usar dados simulados em hipótese alguma"
+        exit 1
+        
+    - name: Success message
+      if: success()
+      run: |
+        echo "✅ Validação bem-sucedida!"
+        echo "✅ Código está em conformidade com a política de dados reais"
