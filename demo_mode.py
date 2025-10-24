@@ -11,17 +11,32 @@ from datetime import datetime, timedelta
 class DemoData:
     """Generate demo trading data for testing"""
     
-    @staticmethod
-    def get_market_price(symbol='BTC-USDT'):
+    # Base prices for different trading pairs
+    BASE_PRICES = {
+        'BTC-USDT': 65000,
+        'ETH-USDT': 3200,
+        'BNB-USDT': 580,
+        'SOL-USDT': 140,
+        'XRP-USDT': 0.55
+    }
+    DEFAULT_BASE_PRICE = 1000
+    MIN_PRICE_RATIO = 0.5  # Minimum price as ratio of base price
+    
+    # Time intervals in minutes
+    INTERVAL_MINUTES = {
+        '1m': 1, '5m': 5, '15m': 15, '30m': 30,
+        '1h': 60, '4h': 240, '1d': 1440
+    }
+    
+    @classmethod
+    def _get_base_price(cls, symbol):
+        """Get base price for a symbol"""
+        return cls.BASE_PRICES.get(symbol, cls.DEFAULT_BASE_PRICE)
+    
+    @classmethod
+    def get_market_price(cls, symbol='BTC-USDT'):
         """Generate demo market price"""
-        base_prices = {
-            'BTC-USDT': 65000,
-            'ETH-USDT': 3200,
-            'BNB-USDT': 580,
-            'SOL-USDT': 140,
-            'XRP-USDT': 0.55
-        }
-        base_price = base_prices.get(symbol, 1000)
+        base_price = cls._get_base_price(symbol)
         price = base_price + random.uniform(-base_price * 0.02, base_price * 0.02)
         
         return {
@@ -34,17 +49,10 @@ class DemoData:
             }
         }
     
-    @staticmethod
-    def get_24h_ticker(symbol='BTC-USDT'):
+    @classmethod
+    def get_24h_ticker(cls, symbol='BTC-USDT'):
         """Generate demo 24h ticker data"""
-        base_prices = {
-            'BTC-USDT': 65000,
-            'ETH-USDT': 3200,
-            'BNB-USDT': 580,
-            'SOL-USDT': 140,
-            'XRP-USDT': 0.55
-        }
-        base_price = base_prices.get(symbol, 1000)
+        base_price = cls._get_base_price(symbol)
         current_price = base_price + random.uniform(-base_price * 0.01, base_price * 0.01)
         high_price = current_price + random.uniform(0, base_price * 0.05)
         low_price = current_price - random.uniform(0, base_price * 0.05)
@@ -66,24 +74,13 @@ class DemoData:
             }
         }
     
-    @staticmethod
-    def get_kline_data(symbol='BTC-USDT', interval='1h', limit=100):
+    @classmethod
+    def get_kline_data(cls, symbol='BTC-USDT', interval='1h', limit=100):
         """Generate demo kline/candlestick data"""
-        base_prices = {
-            'BTC-USDT': 65000,
-            'ETH-USDT': 3200,
-            'BNB-USDT': 580,
-            'SOL-USDT': 140,
-            'XRP-USDT': 0.55
-        }
-        base_price = base_prices.get(symbol, 1000)
+        base_price = cls._get_base_price(symbol)
         
         # Calculate time intervals
-        interval_minutes = {
-            '1m': 1, '5m': 5, '15m': 15, '30m': 30,
-            '1h': 60, '4h': 240, '1d': 1440
-        }
-        minutes = interval_minutes.get(interval, 60)
+        minutes = cls.INTERVAL_MINUTES.get(interval, 60)
         
         klines = []
         current_time = datetime.now()
@@ -92,7 +89,7 @@ class DemoData:
         for i in range(limit):
             # Generate realistic price movement
             price_change = random.uniform(-base_price * 0.02, base_price * 0.02)
-            current_price = max(current_price + price_change, base_price * 0.5)
+            current_price = max(current_price + price_change, base_price * cls.MIN_PRICE_RATIO)
             
             open_price = current_price
             close_price = open_price + random.uniform(-base_price * 0.01, base_price * 0.01)
