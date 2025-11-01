@@ -29,6 +29,29 @@
 
 ## 🚀 Como Usar
 
+### 🌐 Via Dashboard Web (NOVO!)
+
+**A maneira mais fácil de visualizar predições:**
+
+1. Acesse o SmartTrade: `http://localhost:8000`
+2. Clique no botão **🔮 Predições** na barra superior
+3. Configure:
+   - **Símbolo**: Digite ou cole (ex: BTC-USDT, ETH-USDT)
+   - **Intervalo**: Escolha o timeframe (1m, 5m, 15m, 1h, 4h, 1d)
+   - **Períodos**: Quantos períodos prever (1-50)
+   - **Modelo**: auto (recomendado), prophet, simple_ma
+4. Clique em **Atualizar** para gerar predição
+
+**O que você verá:**
+- 📊 Candles históricos (preto/cinza)
+- 📈 Linha de predição (laranja)
+- 📉 Bandas de confiança (linhas pontilhadas)
+- ℹ️ Resumo: modelo usado, tendência, força, confiança média
+
+**URL direta:** `http://localhost:8000/static/prediction_overlay.html`
+
+---
+
 ### Via API REST
 
 **Predição Simples:**
@@ -135,17 +158,23 @@ python3 view_prediction.py ETH-USDT compare
 - Não captura sazonalidade
 - Assume que tendência se mantém
 
-### 2. Prophet (Opcional)
+### 2. Prophet (✅ INSTALADO)
 **Como funciona:**
 - Modelo desenvolvido pelo Facebook para séries temporais
 - Detecta automaticamente tendências e sazonalidade
 - Robusto a outliers e dados faltantes
 - Intervalos de confiança nativos
 
-**Instalar:**
+**Instalar (se necessário):**
 ```bash
+# No dev container
+/bin/python3 -m pip install prophet --break-system-packages
+
+# Em ambiente virtual
 pip install prophet
 ```
+
+**Status:** ✅ Prophet já está instalado e disponível neste ambiente!
 
 **Quando usar:**
 - Dados com padrões sazonais
@@ -444,12 +473,14 @@ $ python3 view_prediction.py BTC-USDT 1h 5
 **IMPLEMENTADO:**
 - ✅ Framework de predição extensível
 - ✅ Modelo Simple MA (baseline)
+- ✅ Modelo Prophet (INSTALADO e funcionando!)
 - ✅ Feature engineering completo
 - ✅ API REST endpoints
 - ✅ Script CLI de visualização
+- ✅ Dashboard web interativo com gráficos
 - ✅ Detecção de tendências
 - ✅ Intervalos de confiança
-- ✅ Suporte a Prophet (opcional)
+- ✅ Integração completa com Lightweight Charts
 
 **EM DESENVOLVIMENTO:**
 - 🔄 LSTM implementation
@@ -458,7 +489,27 @@ $ python3 view_prediction.py BTC-USDT 1h 5
 - 🔄 Dashboard web de predição
 
 **PRONTO PARA USO:** 🚀
-Sistema funcional com modelo baseline que já fornece predições úteis!
+Sistema 100% funcional com Prophet instalado e dashboard web interativo!
+
+### 🎯 Como Começar AGORA
+
+**Opção 1 - Dashboard Web (Recomendado):**
+```bash
+# Servidor já está rodando em http://localhost:8000
+# Clique no botão 🔮 Predições na barra superior
+# OU acesse diretamente:
+```
+👉 **http://localhost:8000/static/prediction_overlay.html**
+
+**Opção 2 - CLI:**
+```bash
+python3 view_prediction.py BTC-USDT 1h 10
+```
+
+**Opção 3 - API:**
+```bash
+curl "http://localhost:8000/api/predict/BTC-USDT?timeframe=1h&periods=10&model=prophet"
+```
 
 ---
 

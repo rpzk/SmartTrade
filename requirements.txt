@@ -14,5 +14,7 @@ aiosqlite==0.19.0
 # ML/Time Series (numpy e pandas já incluídos na imagem base)
 # Opcionais para predição avançada:
 # prophet>=1.1.5          # Facebook Prophet (recomendado)
+# If you want to enable Prophet-based predictions uncomment the line above and run:
+# pip install -r requirements.txt
 # statsmodels>=0.14.0     # ARIMA e modelos estatísticos
 # tensorflow>=2.13.0      # LSTM e deep learning
