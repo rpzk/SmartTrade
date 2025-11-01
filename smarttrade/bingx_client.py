@@ -229,6 +229,24 @@ class BingXClient:
         return items[0]
 
     # ===== Swap (Perp) =====
+    def swap_contracts(self) -> List[Dict[str, Any]]:
+        """
+        Lista todos os contratos perpétuos (swap) disponíveis na BingX.
+        
+        Returns:
+            Lista de contratos com informações como symbol, size, currency, etc
+            
+        Raises:
+            BingXAPIError: Se a API retornar erro
+            BingXError: Se houver erro de rede/HTTP
+            
+        Endpoint: /openApi/swap/v2/quote/contracts
+        """
+        logger.debug("Fetching all swap contracts")
+        
+        data = self._get("/openApi/swap/v2/quote/contracts", params={})
+        return data.get("data") or []
+
     def swap_ticker(self, symbol: str) -> Dict[str, Any]:
         """
         Ticker para contratos perpétuos (swap).
@@ -258,7 +276,9 @@ class BingXClient:
         self, 
         symbol: str, 
         interval: str = "1m", 
-        limit: int = 100
+        limit: int = 100,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None
     ) -> List[Dict[str, Any]]:
         """
         Klines para contratos perpétuos (swap), com intervalos como 1m, 5m, 1h, 1d.
@@ -266,7 +286,9 @@ class BingXClient:
         Args:
             symbol: Par de negociação (ex: BTC-USDT)
             interval: Intervalo temporal (1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w)
-            limit: Quantidade de candles (1-1500)
+            limit: Quantidade de candles (1-1440)
+            start_time: Timestamp de início em ms (opcional)
+            end_time: Timestamp de fim em ms (opcional)
             
         Returns:
             Lista de klines (candles) com open, close, high, low, volume, time
@@ -282,8 +304,9 @@ class BingXClient:
         if not symbol or not isinstance(symbol, str):
             raise ValueError(f"Invalid symbol: {symbol}")
         
-        if limit < 1 or limit > 1500:
-            raise ValueError(f"Invalid limit: {limit} (must be 1-1500)")
+        # Limite máximo da BingX é 1440
+        if limit < 1 or limit > 1440:
+            raise ValueError(f"Invalid limit: {limit} (must be 1-1440)")
         
         valid_intervals = {"1m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d", "1w"}
         if interval not in valid_intervals:
@@ -294,10 +317,15 @@ class BingXClient:
         
         logger.debug(
             f"Fetching swap klines for {symbol}",
-            extra={"interval": interval, "limit": limit}
+            extra={"interval": interval, "limit": limit, "start_time": start_time, "end_time": end_time}
         )
         
         params = {"symbol": symbol, "interval": interval, "limit": limit}
+        if start_time is not None:
+            params["startTime"] = start_time
+        if end_time is not None:
+            params["endTime"] = end_time
+            
         data = self._get("/openApi/swap/v2/quote/klines", params=params)
         return data.get("data") or []
 

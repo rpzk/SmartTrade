@@ -1,0 +1,142 @@
+{
+  "db_path": "smarttrade.db",
+  "audit_timestamp": "2025-10-31T13:55:57.313677",
+  "summary": {
+    "total_records": 28,
+    "unique_symbols": 2,
+    "unique_intervals": 2
+  },
+  "by_symbol_interval": [
+    {
+      "symbol": "BTC-USDT",
+      "interval": "1m",
+      "count": 23,
+      "unique_times": 23,
+      "duplicates": 0,
+      "date_range": {
+        "start": "2025-10-24 19:50:00",
+        "end": "2025-10-24 20:12:00",
+        "start_ms": 1761335400000,
+        "end_ms": 1761336720000
+      }
+    },
+    {
+      "symbol": "ETH-USDT",
+      "interval": "5m",
+      "count": 5,
+      "unique_times": 5,
+      "duplicates": 0,
+      "date_range": {
+        "start": "2025-10-24 19:35:00",
+        "end": "2025-10-24 19:55:00",
+        "start_ms": 1761334500000,
+        "end_ms": 1761335700000
+      }
+    }
+  ],
+  "issues": [
+    "\u2705 Nenhum problema detectado"
+  ],
+  "sample_records": [
+    {
+      "symbol": "BTC-USDT",
+      "interval": "1m",
+      "datetime": "2025-10-24 20:12:00",
+      "open": "110615.6",
+      "high": "110615.6",
+      "low": "110597.8",
+      "close": "110604.7",
+      "volume": "2.4241"
+    },
+    {
+      "symbol": "BTC-USDT",
+      "interval": "1m",
+      "datetime": "2025-10-24 20:11:00",
+      "open": "110585.2",
+      "high": "110619.6",
+      "low": "110585.0",
+      "close": "110615.4",
+      "volume": "1.2575"
+    },
+    {
+      "symbol": "BTC-USDT",
+      "interval": "1m",
+      "datetime": "2025-10-24 20:10:00",
+      "open": "110479.3",
+      "high": "110596.0",
+      "low": "110479.3",
+      "close": "110585.2",
+      "volume": "4.0243"
+    },
+    {
+      "symbol": "BTC-USDT",
+      "interval": "1m",
+      "datetime": "2025-10-24 20:09:00",
+      "open": "110511.4",
+      "high": "110511.4",
+      "low": "110472.4",
+      "close": "110479.5",
+      "volume": "3.1367"
+    },
+    {
+      "symbol": "BTC-USDT",
+      "interval": "1m",
+      "datetime": "2025-10-24 20:08:00",
+      "open": "110503.5",
+      "high": "110533.4",
+      "low": "110501.9",
+      "close": "110511.4",
+      "volume": "1.5726"
+    },
+    {
+      "symbol": "BTC-USDT",
+      "interval": "1m",
+      "datetime": "2025-10-24 20:07:00",
+      "open": "110469.3",
+      "high": "110541.1",
+      "low": "110467.9",
+      "close": "110503.5",
+      "volume": "0.5889"
+    },
+    {
+      "symbol": "BTC-USDT",
+      "interval": "1m",
+      "datetime": "2025-10-24 20:06:00",
+      "open": "110458.1",
+      "high": "110540.0",
+      "low": "110454.5",
+      "close": "110469.3",
+      "volume": "5.2041"
+    },
+    {
+      "symbol": "BTC-USDT",
+      "interval": "1m",
+      "datetime": "2025-10-24 20:05:00",
+      "open": "110487.7",
+      "high": "110487.7",
+      "low": "110457.9",
+      "close": "110457.9",
+      "volume": "4.0658"
+    },
+    {
+      "symbol": "BTC-USDT",
+      "interval": "1m",
+      "datetime": "2025-10-24 20:04:00",
+      "open": "110548.8",
+      "high": "110548.8",
+      "low": "110481.0",
+      "close": "110487.7",
+      "volume": "2.5052"
+    },
+    {
+      "symbol": "BTC-USDT",
+      "interval": "1m",
+      "datetime": "2025-10-24 20:03:00",
+      "open": "110526.6",
+      "high": "110548.8",
+      "low": "110509.2",
+      "close": "110548.6",
+      "volume": "3.5252"
+    }
+  ]
+}

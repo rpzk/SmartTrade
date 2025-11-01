@@ -1,0 +1,658 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SmartTrade</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; 
+      background: #0a0e27; 
+      color: #e2e8f0; 
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    
+    #toolbar {
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(10px);
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      z-index: 100;
+      flex-shrink: 0;
+    }
+    
+    select, input {
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(30, 41, 59, 0.8);
+      color: #e2e8f0;
+      font: inherit;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    
+    select:hover, input:hover {
+      border-color: rgba(99, 102, 241, 0.5);
+      background: rgba(30, 41, 59, 1);
+    }
+    
+    select:focus, input:focus {
+      outline: none;
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+    
+    input[type="number"] {
+      width: 80px;
+    }
+    
+    #chart-container {
+      flex: 1;
+      padding: 1.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    #chart {
+      position: absolute;
+      top: 1.5rem;
+      left: 1.5rem;
+      right: 1.5rem;
+      bottom: 1.5rem;
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      cursor: grab;
+    }
+    
+    #chart.grabbing {
+      cursor: grabbing;
+    }
+    
+    .status-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 8px #10b981;
+      animation: pulse 2s ease-in-out infinite;
+      margin-left: auto;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    .divider {
+      width: 1px;
+      height: 24px;
+      background: rgba(255, 255, 255, 0.1);
+    }
+    
+    .help-text {
+      color: #64748b;
+      font-size: 0.75rem;
+      margin-left: auto;
+      margin-right: 1rem;
+      user-select: none;
+    }
+    
+    button {
+      transition: all 0.2s ease;
+    }
+    
+    button:hover {
+      background: rgba(99, 102, 241, 0.3) !important;
+      border-color: rgba(99, 102, 241, 0.6) !important;
+      color: #c7d2fe !important;
+      transform: translateY(-1px);
+    }
+    
+    button:active {
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <input id="search-symbol" type="text" placeholder="Buscar símbolo..." style="width: 150px;" />
+    
+    <select id="symbol">
+      <option value="">Carregando...</option>
+    </select>
+    
+    <select id="interval">
+      <option>1m</option>
+      <option>5m</option>
+      <option selected>15m</option>
+      <option>1h</option>
+      <option>4h</option>
+      <option>1d</option>
+    </select>
+    
+    <input id="limit" type="number" min="100" max="1000" value="500" />
+    
+    <div class="divider"></div>
+    
+    <button id="reset-zoom" style="padding: 0.5rem 0.75rem; background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.4); color: #a5b4fc; cursor: pointer; border-radius: 6px; font-size: 0.85rem;">
+      🔍 Reset
+    </button>
+    
+    <span class="help-text">💡 Arraste para mover • Scroll para zoom</span>
+    
+    <div class="status-indicator" id="status"></div>
+  </div>
+  
+  <div id="chart-container">
+    <canvas id="chart"></canvas>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.2.1/dist/chartjs-chart-financial.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let ws;
+    let chart;
+    let availableSymbols = [];
+    let isLoadingHistory = false;
+    let oldestTimestamp = null;
+
+    function upsertCandle(dataset, c) {
+      const t = c.time;
+      const foundIdx = dataset.findIndex(x => x.x === t);
+      const point = { x: t, o: +c.open, h: +c.high, l: +c.low, c: +c.close };
+      if (foundIdx >= 0) dataset[foundIdx] = point; 
+      else dataset.push(point);
+      dataset.sort((a,b) => a.x - b.x);
+    }
+
+    function createChart() {
+      const ctx = $('chart');
+      const symbol = $('symbol').value;
+      
+      console.log('Creating Chart.js instance...');
+      
+      chart = new Chart(ctx, {
+        type: 'candlestick',
+        data: { 
+          datasets: [
+            { 
+              label: symbol,
+              data: [],
+              borderColor: 'rgba(99, 102, 241, 0.8)',
+              color: {
+                up: '#10b981',
+                down: '#ef4444',
+                unchanged: '#6b7280',
+              },
+              order: 1
+            }
+          ] 
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          parsing: false,
+          animation: false,
+          plugins: { 
+            legend: { 
+              display: false
+            },
+            annotation: {
+              annotations: {
+                bidLine: {
+                  type: 'line',
+                  yMin: 0,
+                  yMax: 0,
+                  borderColor: 'rgba(16, 185, 129, 0.8)',
+                  borderWidth: 2,
+                  borderDash: [8, 4],
+                  label: {
+                    content: 'Bid',
+                    enabled: true,
+                    position: 'start',
+                    backgroundColor: 'rgba(16, 185, 129, 0.8)',
+                    color: 'white',
+                    font: { size: 10 }
+                  }
+                },
+                askLine: {
+                  type: 'line',
+                  yMin: 0,
+                  yMax: 0,
+                  borderColor: 'rgba(239, 68, 68, 0.8)',
+                  borderWidth: 2,
+                  borderDash: [8, 4],
+                  label: {
+                    content: 'Ask',
+                    enabled: true,
+                    position: 'start',
+                    backgroundColor: 'rgba(239, 68, 68, 0.8)',
+                    color: 'white',
+                    font: { size: 10 }
+                  }
+                }
+              }
+            },
+            zoom: {
+              pan: {
+                enabled: true,
+                mode: 'xy',
+                modifierKey: null
+              },
+              zoom: {
+                wheel: {
+                  enabled: true,
+                  speed: 0.1
+                },
+                pinch: {
+                  enabled: true
+                },
+                mode: 'xy'
+              },
+              limits: {
+                x: { minRange: 60000 * 5 }
+              },
+              onPanComplete: async function({chart}) {
+                await checkAndLoadHistory();
+              },
+              onZoomComplete: async function({chart}) {
+                await checkAndLoadHistory();
+              }
+            },
+            tooltip: {
+              enabled: true,
+              mode: 'index',
+              intersect: false,
+              backgroundColor: 'rgba(15, 23, 42, 0.95)',
+              titleColor: '#e2e8f0',
+              bodyColor: '#cbd5e1',
+              borderColor: 'rgba(99, 102, 241, 0.5)',
+              borderWidth: 1,
+              padding: 12,
+              displayColors: false,
+              callbacks: {
+                title: function(context) {
+                  const date = luxon.DateTime.fromMillis(context[0].parsed.x);
+                  return date.toLocaleString(luxon.DateTime.DATETIME_MED);
+                },
+                label: function(context) {
+                  const point = context.raw;
+                  return [
+                    `O: ${point.o.toFixed(2)}`,
+                    `H: ${point.h.toFixed(2)}`,
+                    `L: ${point.l.toFixed(2)}`,
+                    `C: ${point.c.toFixed(2)}`,
+                  ];
+                }
+              }
+            }
+          },
+          scales: {
+            x: { 
+              type: 'time',
+              time: {
+                tooltipFormat: 'DD/MM HH:mm',
+              },
+              grid: {
+                color: 'rgba(255, 255, 255, 0.05)',
+                drawBorder: false,
+              },
+              ticks: {
+                color: '#94a3b8',
+                maxRotation: 0,
+              }
+            },
+            y: { 
+              position: 'right',
+              grid: {
+                color: 'rgba(255, 255, 255, 0.05)',
+                drawBorder: false,
+              },
+              ticks: {
+                color: '#94a3b8',
+                callback: (value) => value.toFixed(2),
+              }
+            }
+          }
+        }
+      });
+    }
+    
+    function resetZoom() {
+      if (!chart) return;
+      chart.resetZoom();
+    }
+
+    async function checkAndLoadHistory() {
+      if (!chart || isLoadingHistory) {
+        console.log('checkAndLoadHistory: skipped', { hasChart: !!chart, isLoading: isLoadingHistory });
+        return;
+      }
+      
+      const xScale = chart.scales.x;
+      const visibleMin = xScale.min;
+      const visibleMax = xScale.max;
+      const dataMin = oldestTimestamp;
+      
+      if (!dataMin) {
+        console.log('checkAndLoadHistory: no oldestTimestamp yet');
+        return;
+      }
+      
+      console.log('checkAndLoadHistory:', {
+        visibleMin: new Date(visibleMin).toISOString(),
+        dataMin: new Date(dataMin).toISOString(),
+        visibleMax: new Date(visibleMax).toISOString(),
+        totalRange: visibleMax - dataMin,
+        distanceToEdge: visibleMin - dataMin
+      });
+      
+      // Se estamos visualizando próximo ao início dos dados (dentro de 30%)
+      const totalRange = visibleMax - dataMin;
+      const threshold = totalRange * 0.3;
+      const distanceToEdge = visibleMin - dataMin;
+      
+      if (distanceToEdge < threshold) {
+        console.log('✅ Threshold reached, loading more history...');
+        await loadMoreHistory();
+      } else {
+        console.log('❌ Still far from edge, not loading yet');
+      }
+    }
+
+    async function loadMoreHistory() {
+      if (isLoadingHistory) return;
+      isLoadingHistory = true;
+      
+      const symbol = $("symbol").value;
+      const interval = $("interval").value;
+      const limit = 300; // Carrega 300 candles adicionais
+      
+      try {
+        console.log(`Loading more history before ${new Date(oldestTimestamp).toISOString()}`);
+        
+        // Usa endTime para buscar dados ANTES do timestamp mais antigo
+        const response = await fetch(`/api/swap/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${limit}&endTime=${oldestTimestamp - 1}`);
+        if (!response.ok) throw new Error(`${response.status}`);
+        
+        const klines = await response.json();
+        if (klines.length === 0) {
+          console.log('No more historical data available');
+          isLoadingHistory = false;
+          return;
+        }
+        
+        console.log(`Loaded ${klines.length} additional historical candles`);
+        
+        // Adiciona os novos candles no início do array
+        const newCandles = klines.map(c => ({ 
+          x: c.time, 
+          o: +c.open, 
+          h: +c.high, 
+          l: +c.low, 
+          c: +c.close 
+        }));
+        
+        // Insere no início mantendo ordem crescente
+        chart.data.datasets[0].data = [...newCandles, ...chart.data.datasets[0].data];
+        oldestTimestamp = newCandles[0].x;
+        
+        chart.update('none');
+        console.log(`Total candles now: ${chart.data.datasets[0].data.length}`);
+      } catch (e) {
+        console.error('Error loading historical data:', e);
+      } finally {
+        isLoadingHistory = false;
+      }
+    }
+
+    async function loadAvailableSymbols() {
+      try {
+        const response = await fetch('/api/swap/contracts');
+        if (!response.ok) throw new Error(`${response.status}`);
+        const contracts = await response.json();
+        
+        availableSymbols = contracts.map(c => c.symbol).sort();
+        console.log(`Loaded ${availableSymbols.length} symbols`);
+        
+        populateSymbolSelect('');
+      } catch (e) {
+        console.error('Error loading symbols:', e);
+        $('symbol').innerHTML = '<option value="BTC-USDT">BTC-USDT</option>';
+      }
+    }
+
+    function populateSymbolSelect(filterText) {
+      const filter = filterText.toLowerCase();
+      const filtered = availableSymbols.filter(s => s.toLowerCase().includes(filter));
+      
+      const principais = ['BTC-USDT', 'ETH-USDT', 'BNB-USDT', 'SOL-USDT'];
+      const defi = filtered.filter(s => ['UNI', 'AAVE', 'LINK', 'SUSHI', 'CRV', 'COMP'].some(t => s.includes(t)));
+      const commodities = filtered.filter(s => ['XAUT', 'PAXG'].some(t => s.includes(t)));
+      const outros = filtered.filter(s => !principais.includes(s) && !defi.includes(s) && !commodities.includes(s));
+      
+      let html = '';
+      
+      if (principais.some(s => s.toLowerCase().includes(filter))) {
+        html += '<optgroup label="Principais">';
+        principais.filter(s => s.toLowerCase().includes(filter)).forEach(s => {
+          html += `<option value="${s}">${s}</option>`;
+        });
+        html += '</optgroup>';
+      }
+      
+      if (defi.length > 0) {
+        html += '<optgroup label="DeFi">';
+        defi.forEach(s => {
+          html += `<option value="${s}">${s}</option>`;
+        });
+        html += '</optgroup>';
+      }
+      
+      if (commodities.length > 0) {
+        html += '<optgroup label="Commodities">';
+        commodities.forEach(s => {
+          html += `<option value="${s}">${s}</option>`;
+        });
+        html += '</optgroup>';
+      }
+      
+      if (outros.length > 0) {
+        const outrosLimited = outros.slice(0, 100);
+        html += '<optgroup label="Outros">';
+        outrosLimited.forEach(s => {
+          html += `<option value="${s}">${s}</option>`;
+        });
+        if (outros.length > 100) {
+          html += `<option disabled>... e mais ${outros.length - 100}</option>`;
+        }
+        html += '</optgroup>';
+      }
+      
+      $('symbol').innerHTML = html || '<option value="">Nenhum símbolo encontrado</option>';
+    }
+
+    let searchTimeout;
+    $('search-symbol').addEventListener('input', (e) => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        populateSymbolSelect(e.target.value);
+      }, 300);
+    });
+
+    async function loadKlines() {
+      const symbol = $("symbol").value;
+      const interval = $("interval").value;
+      const limit = $("limit").value;
+
+      console.log(`Loading klines: ${symbol} ${interval} (limit: ${limit})`);
+
+      try {
+        const response = await fetch(`/api/swap/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${encodeURIComponent(limit)}`);
+        if (!response.ok) throw new Error(`${response.status}`);
+        
+        const klines = await response.json();
+        console.log(`Received ${klines.length} klines`, klines[0]);
+        
+        if (!chart) {
+          console.log('Creating chart...');
+          createChart();
+        }
+        
+        chart.data.datasets[0].label = symbol;
+        const chartData = klines.map(c => ({ 
+          x: c.time, 
+          o: +c.open, 
+          h: +c.high, 
+          l: +c.low, 
+          c: +c.close 
+        }));
+        chart.data.datasets[0].data = chartData;
+        
+        // Atualiza o timestamp mais antigo
+        if (chartData.length > 0) {
+          oldestTimestamp = chartData[0].x;
+        }
+        
+        console.log(`Chart data updated with ${chart.data.datasets[0].data.length} candles`);
+        // Dados mudaram: precisamos recalcular elementos do gráfico
+        resetZoom(); // Reseta o zoom para se ajustar aos novos dados carregados
+      } catch (e) {
+        console.error('Error loading klines:', e);
+      }
+    }
+
+    function connectWebSocket() {
+      if (ws) { 
+        try { ws.close(); } catch (_) {} 
+      }
+      
+      const symbol = $("symbol").value;
+      const interval = $("interval").value;
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const url = `${proto}://${location.host}/ws/swap/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}`;
+      
+      ws = new WebSocket(url);
+      
+      ws.onopen = () => {
+        $('status').style.background = '#10b981';
+        $('status').style.boxShadow = '0 0 8px #10b981';
+      };
+      
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data);
+          
+          if (msg.type === 'snapshot') {
+            console.log(`WS Snapshot received: ${msg.data?.length || 0} candles`);
+            if (!chart) createChart();
+            
+            const rows = msg.data || [];
+            const chartData = rows.map(c => ({ 
+              x: c.time, 
+              o: +c.open, 
+              h: +c.high, 
+              l: +c.low, 
+              c: +c.close 
+            }));
+            chart.data.datasets[0].data = chartData;
+            chart.update('none');
+            
+          } else if (msg.type === 'kline') {
+            if (chart) {
+              upsertCandle(chart.data.datasets[0].data, msg.data);
+              chart.update('none');
+            }
+          }
+        } catch (e) {
+          console.error('WebSocket message error:', e);
+        }
+      };
+      
+      ws.onclose = () => {
+        $('status').style.background = '#ef4444';
+        $('status').style.boxShadow = '0 0 8px #ef4444';
+        setTimeout(connectWebSocket, 2000);
+      };
+      
+      ws.onerror = () => {
+        $('status').style.background = '#f59e0b';
+        $('status').style.boxShadow = '0 0 8px #f59e0b';
+        try { ws.close(); } catch (_) {}
+      };
+    }
+
+    let bidAskInterval;
+    
+    async function updateBidAsk() {
+      if (!chart) return;
+      
+      const symbol = $("symbol").value;
+      try {
+        const response = await fetch(`/api/swap/ticker?symbol=${encodeURIComponent(symbol)}`);
+        if (!response.ok) return;
+        
+        const ticker = await response.json();
+        const bidPrice = parseFloat(ticker.bidPrice);
+        const askPrice = parseFloat(ticker.askPrice);
+        
+        if (!bidPrice || !askPrice) return;
+
+        // Update annotation values directly
+        chart.options.plugins.annotation.annotations.bidLine.yMin = bidPrice;
+        chart.options.plugins.annotation.annotations.bidLine.yMax = bidPrice;
+        chart.options.plugins.annotation.annotations.bidLine.label.content = `Bid: ${bidPrice.toFixed(2)}`;
+        
+        chart.options.plugins.annotation.annotations.askLine.yMin = askPrice;
+        chart.options.plugins.annotation.annotations.askLine.yMax = askPrice;
+        chart.options.plugins.annotation.annotations.askLine.label.content = `Ask: ${askPrice.toFixed(2)}`;
+        
+        // Apenas atualiza o gráfico, sem recalcular escalas
+        chart.update('none');
+      } catch (e) {
+        console.error('Error updating bid/ask:', e);
+      }
+    }
+
+    function handleChange() {
+      loadKlines();
+      connectWebSocket();
+      
+      // Clear old interval and start new one
+      if (bidAskInterval) clearInterval(bidAskInterval);
+      updateBidAsk();
+      bidAskInterval = setInterval(updateBidAsk, 1000);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('DOM ready');
+      
+      $('symbol').addEventListener('change', handleChange);
+      $('interval').addEventListener('change', handleChange);
+      $('limit').addEventListener('change', handleChange);
+      $('reset-zoom').addEventListener('click', resetZoom);
+      
+      loadAvailableSymbols().then(() => {
+        $('symbol').value = 'BTC-USDT';
+        handleChange();
+      });
+    });
+  </script>
+</body>
+</html>

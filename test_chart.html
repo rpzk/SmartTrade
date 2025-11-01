@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test Chart</title>
+  <style>
+    body { background: #0a0e27; margin: 0; padding: 20px; }
+    #container { width: 800px; height: 600px; }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <canvas id="chart"></canvas>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@3.3.0/dist/chartjs-chart-financial.min.js"></script>
+  
+  <script>
+    console.log('Chart.js loaded:', typeof Chart !== 'undefined');
+    console.log('Luxon loaded:', typeof luxon !== 'undefined');
+    
+    // Dados de teste
+    const testData = [
+      { x: 1761915600000, o: 109609.4, h: 110019.0, l: 109583.6, c: 109983.1 },
+      { x: 1761916500000, o: 109983.1, h: 110185.4, l: 109839.1, c: 109880.1 },
+      { x: 1761917400000, o: 109880.3, h: 109880.3, l: 109312.7, c: 109563.8 },
+      { x: 1761918300000, o: 109563.8, h: 110170.8, l: 109540.5, c: 110099.8 },
+      { x: 1761919200000, o: 110099.8, h: 110460.1, l: 109894.0, c: 110431.6 }
+    ];
+    
+    const ctx = document.getElementById('chart');
+    const chart = new Chart(ctx, {
+      type: 'candlestick',
+      data: {
+        datasets: [{
+          label: 'Test',
+          data: testData,
+          color: {
+            up: '#10b981',
+            down: '#ef4444',
+            unchanged: '#6b7280'
+          }
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        parsing: false,
+        scales: {
+          x: {
+            type: 'time'
+          },
+          y: {
+            position: 'right'
+          }
+        }
+      }
+    });
+    
+    console.log('Chart created:', chart);
+  </script>
+</body>
+</html>

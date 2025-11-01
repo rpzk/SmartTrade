@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SmartTrade</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; 
+      background: #0a0e27; 
+      color: #e2e8f0; 
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    
+    #toolbar {
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(10px);
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      z-index: 100;
+      flex-shrink: 0;
+    }
+    
+    select, input {
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(30, 41, 59, 0.8);
+      color: #e2e8f0;
+      font: inherit;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    
+    select:hover, input:hover {
+      border-color: rgba(99, 102, 241, 0.5);
+      background: rgba(30, 41, 59, 1);
+    }
+    
+    select:focus, input:focus {
+      outline: none;
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+    
+    input[type="number"] {
+      width: 80px;
+    }
+    
+    #chart-container {
+      flex: 1;
+      padding: 1.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    #chart {
+      position: absolute;
+      top: 1.5rem;
+      left: 1.5rem;
+      right: 1.5rem;
+      bottom: 1.5rem;
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    }
+    
+    .status-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 8px #10b981;
+      animation: pulse 2s ease-in-out infinite;
+      margin-left: auto;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    .divider {
+      width: 1px;
+      height: 24px;
+      background: rgba(255, 255, 255, 0.1);
+    }
+    
+    .help-text {
+      color: #64748b;
+      font-size: 0.75rem;
+      margin-left: auto;
+      margin-right: 1rem;
+      user-select: none;
+    }
+    
+    button {
+      transition: all 0.2s ease;
+    }
+    
+    button:hover {
+      background: rgba(99, 102, 241, 0.3) !important;
+      border-color: rgba(99, 102, 241, 0.6) !important;
+      color: #c7d2fe !important;
+      transform: translateY(-1px);
+    }
+    
+    button:active {
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <input id="search-symbol" type="text" placeholder="Buscar símbolo..." style="width: 150px;" />
+    
+    <select id="symbol">
+      <option value="">Carregando...</option>
+    </select>
+    
+    <select id="interval">
+      <option>1m</option>
+      <option>5m</option>
+      <option selected>15m</option>
+      <option>1h</option>
+      <option>4h</option>
+      <option>1d</option>
+    </select>
+    
+    <input id="limit" type="number" min="10" max="500" value="100" />
+    
+    <div class="divider"></div>
+    
+    <button id="reset-zoom" style="padding: 0.5rem 0.75rem; background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.4); color: #a5b4fc; cursor: pointer; border-radius: 6px; font-size: 0.85rem;" title="Resetar zoom (duplo-clique no gráfico também funciona)">
+      🔍 Reset
+    </button>
+    
+    <span class="help-text">💡 Arraste para mover • Scroll para zoom • Duplo-clique para resetar</span>
+    
+    <div class="status-indicator" id="status"></div>
+  </div>
+  
+  <div id="chart-container">
+    <canvas id="chart"></canvas>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.2.1/dist/chartjs-chart-financial.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let ws;
+    let chart;
+    let availableSymbols = [];
+
+    function upsertCandle(dataset, c) {
+      const t = c.time;
+      const foundIdx = dataset.findIndex(x => x.x === t);
+      const point = { x: t, o: +c.open, h: +c.high, l: +c.low, c: +c.close };
+      if (foundIdx >= 0) dataset[foundIdx] = point; 
+      else dataset.push(point);
+      dataset.sort((a,b) => a.x - b.x);
+    }
+
+    function createChart() {
+      const ctx = $('chart');
+      const symbol = $('symbol').value;
+      
+      console.log('Creating Chart.js instance...');
+      
+      chart = new Chart(ctx, {
+        type: 'candlestick',
+        data: { 
+          datasets: [{ 
+            label: symbol,
+            data: [],
+            borderColor: 'rgba(99, 102, 241, 0.8)',
+            color: {
+              up: '#10b981',
+              down: '#ef4444',
+              unchanged: '#6b7280',
+            }
+          }] 
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          parsing: false,
+          plugins: { 
+            legend: { 
+              display: false
+            },
+            tooltip: {
+              enabled: true,
+              mode: 'index',
+              intersect: false,
+              backgroundColor: 'rgba(15, 23, 42, 0.95)',
+              titleColor: '#e2e8f0',
+              bodyColor: '#cbd5e1',
+              borderColor: 'rgba(99, 102, 241, 0.5)',
+              borderWidth: 1,
+              padding: 12,
+              displayColors: false,
+              callbacks: {
+                title: function(context) {
+                  const date = luxon.DateTime.fromMillis(context[0].parsed.x);
+                  return date.toLocaleString(luxon.DateTime.DATETIME_MED);
+                },
+                label: function(context) {
+                  const point = context.raw;
+                  return [
+                    `O: ${point.o.toFixed(2)}`,
+                    `H: ${point.h.toFixed(2)}`,
+                    `L: ${point.l.toFixed(2)}`,
+                    `C: ${point.c.toFixed(2)}`,
+                  ];
+                }
+              }
+            },
+            zoom: {
+              pan: {
+                enabled: true,
+                mode: 'xy'
+              },
+              zoom: {
+                wheel: {
+                  enabled: true,
+                  speed: 0.1
+                },
+                pinch: {
+                  enabled: true
+                },
+                mode: 'xy'
+              },
+              limits: {
+                x: {
+                  minRange: 60000 * 5
+                },
+                y: {
+                  minRange: 0.01
+                }
+              }
+            }
+          },
+          scales: {
+            x: { 
+              type: 'time',
+              time: {
+                tooltipFormat: 'DD/MM HH:mm',
+              },
+              grid: {
+                color: 'rgba(255, 255, 255, 0.05)',
+                drawBorder: false,
+              },
+              ticks: {
+                color: '#94a3b8',
+                maxRotation: 0,
+              }
+            },
+            y: { 
+              position: 'right',
+              type: 'linear',
+              grace: '5%',
+              grid: {
+                color: 'rgba(255, 255, 255, 0.05)',
+                drawBorder: false,
+              },
+              ticks: {
+                color: '#94a3b8',
+                callback: function(value) {
+                  return value.toFixed(2);
+                }
+              }
+            }
+          },
+          interaction: {
+            mode: 'index',
+            intersect: false,
+          },
+          onHover: (event, activeElements) => {
+            const canvas = event.native.target;
+            if (!canvas.style.cursor.includes('grabbing')) {
+              canvas.style.cursor = activeElements.length > 0 ? 'crosshair' : 'grab';
+            }
+          }
+        }
+      });
+      
+      // Definir cursor inicial
+      ctx.style.cursor = 'grab';
+      
+      return chart;
+    }
+
+    async function loadKlines() {
+      const symbol = $("symbol").value;
+      const interval = $("interval").value;
+      const limit = $("limit").value;
+
+      console.log(`Loading klines: ${symbol} ${interval} (limit: ${limit})`);
+
+      try {
+        const response = await fetch(`/api/swap/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${encodeURIComponent(limit)}`);
+        if (!response.ok) throw new Error(`${response.status}`);
+        
+        const klines = await response.json();
+        console.log(`Received ${klines.length} klines`, klines[0]);
+        
+        if (!chart) {
+          console.log('Creating chart...');
+          createChart();
+        }
+        
+        chart.data.datasets[0].label = symbol;
+        const chartData = klines.map(c => ({ 
+          x: c.time, 
+          o: +c.open, 
+          h: +c.high, 
+          l: +c.low, 
+          c: +c.close 
+        }));
+        chart.data.datasets[0].data = chartData;
+        
+        // Define limites amplos: 100% de margem para cada lado (X e Y)
+        if (chartData.length > 0) {
+          // Limites X (tempo)
+          const minTime = chartData[0].x;
+          const maxTime = chartData[chartData.length - 1].x;
+          const timeRange = maxTime - minTime;
+          chart.options.plugins.zoom.limits.x.min = minTime - timeRange;
+          chart.options.plugins.zoom.limits.x.max = maxTime + timeRange;
+          
+          // Limites Y (preço)
+          const prices = chartData.flatMap(c => [c.h, c.l]);
+          const minPrice = Math.min(...prices);
+          const maxPrice = Math.max(...prices);
+          const priceRange = maxPrice - minPrice;
+          chart.options.plugins.zoom.limits.y.min = minPrice - priceRange;
+          chart.options.plugins.zoom.limits.y.max = maxPrice + priceRange;
+        }
+        
+        console.log(`Chart data updated with ${chart.data.datasets[0].data.length} candles`);
+        chart.update('none');
+      } catch (e) {
+        console.error('Error loading klines:', e);
+      }
+    }
+
+    function connectWebSocket() {
+      if (ws) { 
+        try { ws.close(); } catch (_) {} 
+      }
+      
+      const symbol = $("symbol").value;
+      const interval = $("interval").value;
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const url = `${proto}://${location.host}/ws/swap/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}`;
+      
+      ws = new WebSocket(url);
+      
+      ws.onopen = () => {
+        $('status').style.background = '#10b981';
+        $('status').style.boxShadow = '0 0 8px #10b981';
+      };
+      
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data);
+          
+          if (msg.type === 'snapshot') {
+            console.log(`WS Snapshot received: ${msg.data?.length || 0} candles`);
+            if (!chart) createChart();
+            
+            const rows = msg.data || [];
+            const chartData = rows.map(c => ({ 
+              x: c.time, 
+              o: +c.open, 
+              h: +c.high, 
+              l: +c.low, 
+              c: +c.close 
+            }));
+            chart.data.datasets[0].data = chartData;
+            
+            // Define limites amplos: 100% de margem para cada lado (X e Y)
+            if (chartData.length > 0) {
+              // Limites X (tempo)
+              const minTime = chartData[0].x;
+              const maxTime = chartData[chartData.length - 1].x;
+              const timeRange = maxTime - minTime;
+              chart.options.plugins.zoom.limits.x.min = minTime - timeRange;
+              chart.options.plugins.zoom.limits.x.max = maxTime + timeRange;
+              
+              // Limites Y (preço)
+              const prices = chartData.flatMap(c => [c.h, c.l]);
+              const minPrice = Math.min(...prices);
+              const maxPrice = Math.max(...prices);
+              const priceRange = maxPrice - minPrice;
+              chart.options.plugins.zoom.limits.y.min = minPrice - priceRange;
+              chart.options.plugins.zoom.limits.y.max = maxPrice + priceRange;
+            }
+            
+            chart.update('none');
+            
+          } else if (msg.type === 'kline') {
+            if (chart) {
+              upsertCandle(chart.data.datasets[0].data, msg.data);
+              chart.update('none');
+            }
+          }
+        } catch (e) {
+          console.error('WebSocket message error:', e);
+        }
+      };
+      
+      ws.onclose = () => {
+        $('status').style.background = '#ef4444';
+        $('status').style.boxShadow = '0 0 8px #ef4444';
+        setTimeout(connectWebSocket, 2000);
+      };
+      
+      ws.onerror = () => {
+        $('status').style.background = '#f59e0b';
+        $('status').style.boxShadow = '0 0 8px #f59e0b';
+        try { ws.close(); } catch (_) {}
+      };
+    }
+
+    function handleChange() {
+      loadKlines();
+      connectWebSocket();
+    }
+
+    // Event listeners
+    $("symbol").addEventListener("change", handleChange);
+    $("interval").addEventListener("change", handleChange);
+    $("limit").addEventListener("change", () => loadKlines());
+    
+    // Busca de símbolo
+    let searchTimeout;
+    $("search-symbol").addEventListener("input", (e) => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        const searchText = e.target.value.trim();
+        populateSymbolSelect(searchText);
+      }, 300);
+    });
+    
+    // Reset zoom
+    $("reset-zoom").addEventListener("click", () => {
+      if (chart) {
+        chart.resetZoom('default');
+        console.log('Zoom reset');
+      }
+    });
+
+    // Resize handler
+    let resizeTimeout;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        if (chart) {
+          chart.resize();
+        }
+      }, 250);
+    });
+
+    function populateSymbolSelect(filterText = '') {
+      const symbolSelect = $('symbol');
+      const currentValue = symbolSelect.value;
+      symbolSelect.innerHTML = '';
+      
+      // Categorizar símbolos
+      const categories = {
+        'Principais': ['BTC-USDT', 'ETH-USDT', 'SOL-USDT', 'XRP-USDT', 'BNB-USDT'],
+        'DeFi': ['UNI-USDT', 'LINK-USDT', 'AAVE-USDT', 'AVAX-USDT', 'ATOM-USDT'],
+        'Commodities': ['XAUT-USDT'],
+        'Altcoins': ['DOGE-USDT', 'ADA-USDT', 'LTC-USDT']
+      };
+      
+      const filter = filterText.toUpperCase();
+      let hasResults = false;
+      
+      // Adicionar categorias organizadas
+      for (const [category, symbols] of Object.entries(categories)) {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = category;
+        
+        for (const symbol of symbols) {
+          if (availableSymbols.includes(symbol) && (!filter || symbol.includes(filter))) {
+            const option = document.createElement('option');
+            option.value = symbol;
+            option.textContent = symbol;
+            optgroup.appendChild(option);
+            hasResults = true;
+          }
+        }
+        
+        if (optgroup.children.length > 0) {
+          symbolSelect.appendChild(optgroup);
+        }
+      }
+      
+      // Adicionar todos os outros símbolos
+      const categorizedSymbols = new Set(Object.values(categories).flat());
+      const otherSymbols = availableSymbols
+        .filter(s => !categorizedSymbols.has(s) && (!filter || s.includes(filter)));
+      
+      if (otherSymbols.length > 0) {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = `Outros (${otherSymbols.length})`;
+        
+        // Limitar a 100 para performance
+        for (const symbol of otherSymbols.slice(0, 100)) {
+          const option = document.createElement('option');
+          option.value = symbol;
+          option.textContent = symbol;
+          optgroup.appendChild(option);
+          hasResults = true;
+        }
+        
+        symbolSelect.appendChild(optgroup);
+      }
+      
+      // Restaurar seleção anterior se ainda existir
+      if (currentValue && availableSymbols.includes(currentValue)) {
+        symbolSelect.value = currentValue;
+      }
+      
+      return hasResults;
+    }
+
+    async function loadAvailableSymbols() {
+      try {
+        const response = await fetch('/api/swap/contracts');
+        if (!response.ok) throw new Error(`${response.status}`);
+        
+        const contracts = await response.json();
+        availableSymbols = contracts.map(c => c.symbol).sort();
+        
+        console.log(`Loaded ${availableSymbols.length} available symbols`);
+        
+        populateSymbolSelect();
+        console.log('Symbol selector populated');
+        
+      } catch (e) {
+        console.error('Error loading symbols:', e);
+        // Fallback para símbolos padrão
+        const symbolSelect = $('symbol');
+        symbolSelect.innerHTML = `
+          <option>BTC-USDT</option>
+          <option>ETH-USDT</option>
+          <option>SOL-USDT</option>
+          <option>XRP-USDT</option>
+        `;
+      }
+    }
+
+    // Initialize when DOM is ready
+    document.addEventListener('DOMContentLoaded', async () => {
+      console.log('DOM ready, initializing...');
+      console.log('Chart.js available:', typeof Chart);
+      console.log('Luxon available:', typeof luxon);
+      
+      await loadAvailableSymbols();
+      loadKlines();
+      connectWebSocket();
+    });
+  </script>
+</body>
+</html>

@@ -191,14 +191,6 @@
       gap: 0;
       overflow: hidden;
     }
-
-    /* Fullscreen mode (hide sidebar) */
-    body.sidebar-hidden #main-content {
-      grid-template-columns: 1fr;
-    }
-    body.sidebar-hidden #sidebar {
-      display: none;
-    }
     
     #chart-container {
       position: relative;
@@ -276,25 +268,33 @@
     .stat-value.negative {
       color: #ef4444;
     }
-
-    /* Favorites chips */
-    .favorite-chip {
-      padding: 0.35rem 0.6rem;
+    
+    .indicator-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    
+    .indicator-btn {
+      width: 100%;
+      padding: 0.5rem;
       background: rgba(30, 41, 59, 0.5);
       border: 1px solid rgba(255, 255, 255, 0.1);
-      color: #cbd5e1;
-      border-radius: 9999px;
-      font-size: 0.8rem;
+      color: #94a3b8;
+      text-align: left;
+      font-size: 0.85rem;
+      border-radius: 6px;
       cursor: pointer;
       transition: all 0.2s ease;
     }
-    .favorite-chip:hover {
+    
+    .indicator-btn:hover {
       background: rgba(30, 41, 59, 0.8);
       border-color: rgba(99, 102, 241, 0.3);
       color: #e2e8f0;
-      transform: translateY(-1px);
     }
-    .favorite-chip.active {
+    
+    .indicator-btn.active {
       background: rgba(99, 102, 241, 0.2);
       border-color: rgba(99, 102, 241, 0.5);
       color: #a5b4fc;
@@ -350,34 +350,6 @@
       display: block;
     }
     
-    /* Toasts */
-    #toast-container {
-      position: fixed;
-      right: 16px;
-      bottom: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      z-index: 3000;
-    }
-    .toast {
-      background: rgba(15, 23, 42, 0.95);
-      border: 1px solid rgba(99, 102, 241, 0.3);
-      color: #e2e8f0;
-      padding: 0.6rem 0.8rem;
-      border-radius: 8px;
-      font-size: 0.85rem;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      animation: fadeIn 0.2s ease;
-    }
-    .toast.success { border-color: rgba(16, 185, 129, 0.4); }
-    .toast.error { border-color: rgba(239, 68, 68, 0.5); }
-    .toast.info { border-color: rgba(99, 102, 241, 0.4); }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px);} to {opacity:1; transform: translateY(0);} }
-    
     /* Scrollbar */
     ::-webkit-scrollbar {
       width: 8px;
@@ -395,58 +367,6 @@
     ::-webkit-scrollbar-thumb:hover {
       background: rgba(99, 102, 241, 0.5);
     }
-    
-    /* Floating Action Button */
-    .fab {
-      position: fixed;
-      bottom: 2rem;
-      right: 2rem;
-      width: 60px;
-      height: 60px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, #6366f1, #8b5cf6);
-      border: none;
-      color: white;
-      font-size: 1.5rem;
-      cursor: pointer;
-      box-shadow: 0 4px 20px rgba(99, 102, 241, 0.5);
-      transition: all 0.3s ease;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 9999;
-      text-decoration: none;
-    }
-    
-    .fab:hover {
-      transform: scale(1.1) translateY(-2px);
-      box-shadow: 0 6px 30px rgba(99, 102, 241, 0.7);
-    }
-    
-    .fab:active {
-      transform: scale(0.95);
-    }
-    
-    .fab-tooltip {
-      position: absolute;
-      right: 70px;
-      top: 50%;
-      transform: translateY(-50%);
-      background: rgba(15, 23, 42, 0.95);
-      color: white;
-      padding: 0.5rem 1rem;
-      border-radius: 8px;
-      font-size: 0.9rem;
-      white-space: nowrap;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.2s ease;
-      border: 1px solid rgba(99, 102, 241, 0.3);
-    }
-    
-    .fab:hover .fab-tooltip {
-      opacity: 1;
-    }
   </style>
 </head>
 <body>
@@ -457,7 +377,6 @@
       <select id="symbol">
         <option value="">Carregando...</option>
       </select>
-      <button id="toggle-favorite" title="Adicionar aos favoritos" style="padding:0.45rem 0.6rem">⭐</button>
     </div>
     
     <div class="divider"></div>
@@ -474,35 +393,17 @@
         <option>1d</option>
       </select>
     </div>
-    <div class="toolbar-section" id="tf-buttons" style="gap:0.25rem;">
-      <button class="tf-btn" data-tf="1m">1m</button>
-      <button class="tf-btn" data-tf="5m">5m</button>
-      <button class="tf-btn active" data-tf="15m">15m</button>
-      <button class="tf-btn" data-tf="30m">30m</button>
-      <button class="tf-btn" data-tf="1h">1h</button>
-      <button class="tf-btn" data-tf="4h">4h</button>
-      <button class="tf-btn" data-tf="1d">1d</button>
-    </div>
     
     <div class="toolbar-section">
       <span class="toolbar-label">Candles</span>
-      <input id="limit" type="number" min="100" max="1440" value="500" step="100" />
+      <input id="limit" type="number" min="100" max="1500" value="500" step="100" />
     </div>
     
     <div class="divider"></div>
     
-  <button id="reset-zoom">🔍 Reset Zoom</button>
-  <button id="fit-content">📐 Fit</button>
-  <button id="toggle-volume" class="active">📊 Volume</button>
-  <button id="toggle-conn" title="Alternar modo de conexão">🌐 Auto</button>
-  
-  <div class="divider"></div>
-  
-  <button onclick="window.location.href='/analysis.html'" title="Ir para Análise Multi-Timeframe" style="background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; font-weight: 600;">📊 Análise SMC</button>
-  
-  <div class="divider"></div>
-  
-  <button id="toggle-fullscreen" title="Alternar tela cheia">🖥️ Tela cheia</button>
+    <button id="reset-zoom">🔍 Reset Zoom</button>
+    <button id="fit-content">📐 Fit</button>
+    <button id="toggle-volume" class="active">📊 Volume</button>
     
     <div class="status-group">
       <div id="quality-indicator" class="quality-badge quality-excellent">Excelente</div>
@@ -522,13 +423,6 @@
     </div>
     
     <div id="sidebar">
-      <div class="sidebar-section">
-        <div class="sidebar-title">⭐ Favoritos</div>
-        <div id="favorites-list" style="display:flex; flex-wrap:wrap; gap:0.5rem;">
-          <div style="font-size: 0.8rem; color: #94a3b8;">Nenhum favorito. Use o botão ⭐ para adicionar.</div>
-        </div>
-      </div>
-
       <div class="sidebar-section">
         <div class="sidebar-title">📈 Estatísticas</div>
         <div class="stat-grid">
@@ -560,6 +454,17 @@
       </div>
       
       <div class="sidebar-section">
+        <div class="sidebar-title">🎯 Indicadores</div>
+        <div class="indicator-controls">
+          <button class="indicator-btn" id="toggle-ma7" data-indicator="ma7">MA 7</button>
+          <button class="indicator-btn active" id="toggle-ma25" data-indicator="ma25">MA 25</button>
+          <button class="indicator-btn active" id="toggle-ma99" data-indicator="ma99">MA 99</button>
+          <button class="indicator-btn" id="toggle-ema" data-indicator="ema">EMA 12/26</button>
+          <button class="indicator-btn" id="toggle-bb" data-indicator="bb">Bollinger Bands</button>
+        </div>
+      </div>
+      
+      <div class="sidebar-section">
         <div class="sidebar-title">ℹ️ Qualidade dos Dados</div>
         <div style="font-size: 0.8rem; color: #94a3b8; line-height: 1.6;">
           <div id="data-quality-info">
@@ -573,111 +478,22 @@
   </div>
   
   <div class="tooltip" id="tooltip"></div>
-  <div id="toast-container"></div>
 
-  <!-- Carregar biblioteca local para maior confiabilidade -->
-  <script src="/static/vendor/lightweight-charts.standalone.production.js"></script>
+  <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
   <script>
     const $ = (id) => document.getElementById(id);
     let ws;
     let chart;
     let candleSeries;
     let volumeSeries;
+    let ma7Series, ma25Series, ma99Series;
     let availableSymbols = [];
     let isLoadingHistory = false;
     let oldestTimestamp = null;
     let candleData = [];
     let volumeData = [];
     let dataMetadata = null;
-  // WS robustez
-  let wsAttempts = 0;
-  let wsReconnectTimer = null;
-  let wsCoolDownUntil = 0; // timestamp ms
-  let httpPollId = null;
-  let connMode = 'auto'; // 'auto' | 'ws' | 'http'
-  let lastWsStatus = null;
-
-    // LocalStorage keys
-    const LS_KEYS = {
-      favorites: 'st:favorites',
-      lastSymbol: 'st:lastSymbol',
-      lastInterval: 'st:lastInterval',
-      lastLimit: 'st:lastLimit',
-      volumeVisible: 'st:volumeVisible',
-    };
-
-    function loadJSON(key, defVal) {
-      try { return JSON.parse(localStorage.getItem(key)) ?? defVal; } catch { return defVal; }
-    }
-    function saveJSON(key, val) {
-      try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
-    }
-
-    // Favorites management
-    function getFavorites() {
-      const fav = loadJSON(LS_KEYS.favorites, []);
-      return Array.isArray(fav) ? fav : [];
-    }
-    function setFavorites(list) {
-      const uniq = Array.from(new Set(list)).filter(Boolean);
-      saveJSON(LS_KEYS.favorites, uniq);
-      renderFavorites();
-      updateFavoriteButton();
-    }
-    function isFavorite(symbol) {
-      return getFavorites().includes(symbol);
-    }
-    function toggleFavorite() {
-      const symbol = $("symbol").value;
-      if (!symbol) return;
-      const favs = getFavorites();
-      if (favs.includes(symbol)) {
-        setFavorites(favs.filter(s => s !== symbol));
-        showToast(`Removido dos favoritos: ${symbol}`, 'warn', 1800);
-      } else {
-        favs.unshift(symbol);
-        setFavorites(favs.slice(0, 30)); // limita a 30
-        showToast(`Adicionado aos favoritos: ${symbol}`, 'success', 1400);
-      }
-    }
-    function updateFavoriteButton() {
-      const btn = $('toggle-favorite');
-      const symbol = $("symbol").value;
-      if (!btn) return;
-      if (isFavorite(symbol)) {
-        btn.classList.add('active');
-        btn.title = 'Remover dos favoritos';
-        btn.textContent = '⭐';
-      } else {
-        btn.classList.remove('active');
-        btn.title = 'Adicionar aos favoritos';
-        btn.textContent = '☆';
-      }
-    }
-    function renderFavorites() {
-      const cont = $('favorites-list');
-      if (!cont) return;
-      const favs = getFavorites();
-      if (!favs.length) {
-        cont.innerHTML = '<div style="font-size: 0.8rem; color: #94a3b8;">Nenhum favorito. Use o botão ⭐ para adicionar.</div>';
-        return;
-      }
-      cont.innerHTML = '';
-      const current = $('symbol').value;
-      favs.forEach(sym => {
-        const b = document.createElement('button');
-        b.className = 'favorite-chip' + (sym === current ? ' active' : '');
-        b.textContent = sym;
-        b.title = 'Selecionar ' + sym;
-        b.onclick = () => {
-          $('symbol').value = sym;
-          updateFavoriteButton();
-          showToast(`Símbolo: ${sym}`, 'info', 1200);
-          handleChange();
-        };
-        cont.appendChild(b);
-      });
-    }
+    let activeIndicators = new Set(['ma25', 'ma99']);
 
     // Configuração do chart
     function createChart() {
@@ -716,8 +532,7 @@
           borderColor: 'rgba(255, 255, 255, 0.1)',
           timeVisible: true,
           secondsVisible: false,
-          // Permitir maior densidade de candles ao dar zoom out
-          minBarSpacing: 1,
+          minBarSpacing: 3,
           rightOffset: 15,
           fixLeftEdge: false,
           fixRightEdge: false,
@@ -759,6 +574,34 @@
         },
       });
 
+      // Moving averages
+      ma7Series = chart.addLineSeries({
+        color: 'rgba(251, 191, 36, 0.8)',
+        lineWidth: 1,
+        crosshairMarkerVisible: false,
+        lastValueVisible: false,
+        priceLineVisible: false,
+        visible: activeIndicators.has('ma7'),
+      });
+
+      ma25Series = chart.addLineSeries({
+        color: 'rgba(59, 130, 246, 0.8)',
+        lineWidth: 2,
+        crosshairMarkerVisible: false,
+        lastValueVisible: false,
+        priceLineVisible: false,
+        visible: activeIndicators.has('ma25'),
+      });
+
+      ma99Series = chart.addLineSeries({
+        color: 'rgba(168, 85, 247, 0.8)',
+        lineWidth: 2,
+        crosshairMarkerVisible: false,
+        lastValueVisible: false,
+        priceLineVisible: false,
+        visible: activeIndicators.has('ma99'),
+      });
+
       // Auto-resize
       new ResizeObserver(() => {
         chart.applyOptions({ 
@@ -768,25 +611,74 @@
       }).observe(container);
 
       // Monitor visible range for lazy loading
-      chart.timeScale().subscribeVisibleLogicalRangeChange((newVisibleLogicalRange) => {
-        if (newVisibleLogicalRange) {
-          checkAndLoadHistory();
-        }
+      chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
+        checkAndLoadHistory();
       });
-
-      // Aplicar preferências salvas (volume)
-      try { applySavedChartPrefs(); } catch (e) {}
 
       console.log('Chart created successfully');
     }
 
-    // Apply saved chart preferences (volume visibility)
-    function applySavedChartPrefs() {
-      const volVisible = loadJSON(LS_KEYS.volumeVisible, true);
-      const volBtn = $('toggle-volume');
-      if (volBtn) volBtn.classList.toggle('active', !!volVisible);
-      if (volumeSeries) volumeSeries.applyOptions({ visible: !!volVisible });
+    // Cálculo de médias móveis
+    function calculateMA(data, period) {
+      const result = [];
+      for (let i = 0; i < data.length; i++) {
+        if (i < period - 1) continue;
+        let sum = 0;
+        for (let j = 0; j < period; j++) {
+          sum += data[i - j].close;
+        }
+        result.push({
+          time: data[i].time,
+          value: sum / period
+        });
+      }
+      return result;
     }
+
+    // Update indicators
+    function updateIndicators() {
+      if (!candleData || candleData.length === 0) return;
+
+      if (activeIndicators.has('ma7') && ma7Series) {
+        const ma7 = calculateMA(candleData, 7);
+        ma7Series.setData(ma7);
+      }
+
+      if (activeIndicators.has('ma25') && ma25Series) {
+        const ma25 = calculateMA(candleData, 25);
+        ma25Series.setData(ma25);
+      }
+
+      if (activeIndicators.has('ma99') && ma99Series) {
+        const ma99 = calculateMA(candleData, 99);
+        ma99Series.setData(ma99);
+      }
+    }
+
+    // Toggle indicator visibility
+    document.querySelectorAll('.indicator-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const indicator = btn.dataset.indicator;
+        const isActive = btn.classList.toggle('active');
+        
+        if (isActive) {
+          activeIndicators.add(indicator);
+        } else {
+          activeIndicators.delete(indicator);
+        }
+
+        // Update series visibility
+        if (indicator === 'ma7' && ma7Series) {
+          ma7Series.applyOptions({ visible: isActive });
+        } else if (indicator === 'ma25' && ma25Series) {
+          ma25Series.applyOptions({ visible: isActive });
+        } else if (indicator === 'ma99' && ma99Series) {
+          ma99Series.applyOptions({ visible: isActive });
+        }
+
+        updateIndicators();
+      });
+    });
 
     // Loading state management
     function showLoading() {
@@ -797,29 +689,13 @@
       $('loading').classList.remove('active');
     }
 
-    // Toasts
-    function showToast(message, type = 'info', timeout = 2500) {
-      const cont = $('toast-container');
-      if (!cont) return;
-      const el = document.createElement('div');
-      el.className = `toast ${type}`;
-      el.textContent = message;
-      cont.appendChild(el);
-      setTimeout(() => {
-        el.style.opacity = '0';
-        el.style.transform = 'translateY(4px)';
-        setTimeout(() => { if (el.parentNode === cont) cont.removeChild(el); }, 200);
-      }, timeout);
-    }
-
     // WebSocket status management
     function updateWSStatus(status) {
       const indicator = $('ws-status');
       const label = $('ws-label');
       
       indicator.className = 'status-indicator';
-
-      // Atualiza label/estilos
+      
       if (status === 'connected') {
         indicator.classList.add('connected');
         label.textContent = 'Conectado';
@@ -830,16 +706,6 @@
         indicator.classList.add('connecting');
         label.textContent = 'Conectando...';
       }
-
-      // Mostrar toast quando houver mudança de estado (para dar feedback ao usuário)
-      try {
-        if (lastWsStatus !== status) {
-          if (status === 'connected') showToast('WebSocket conectado', 'success', 1500);
-          else if (status === 'disconnected') showToast('WebSocket desconectado — reconectando...', 'warn', 2000);
-          else if (status === 'connecting') showToast('Conectando WebSocket...', 'info', 1200);
-        }
-      } catch (e) { /* ignore */ }
-      lastWsStatus = status;
     }
 
     // Update data quality indicators
@@ -938,6 +804,7 @@
         volumeData.sort((a, b) => a.time - b.time);
       }
 
+      updateIndicators();
       updateStats();
     }
 
@@ -1002,12 +869,7 @@
     async function loadKlines() {
       const symbol = $("symbol").value;
       const interval = $("interval").value;
-      let limit = parseInt($("limit").value) || 500;
-      
-      // Valida e corrige limite (máximo da BingX é 1440)
-      if (limit < 100) limit = 100;
-      if (limit > 1440) limit = 1440;
-      $("limit").value = limit;
+      const limit = $("limit").value;
 
       console.log(`Loading klines: ${symbol} ${interval} (limit: ${limit})`);
       showLoading();
@@ -1024,7 +886,6 @@
         
         if (!chart) {
           createChart();
-          applySavedChartPrefs();
         }
         
         // Convert to chart format
@@ -1049,22 +910,14 @@
           oldestTimestamp = klines[0].time;
         }
         
-        // Ajuste inicial: focar nos últimos ~300 candles para evitar densidade excessiva
-        const totalBars = candleData.length;
-        if (totalBars > 0) {
-          const target = Math.min(300, totalBars);
-          try {
-            chart.timeScale().setVisibleLogicalRange({ from: totalBars - target, to: totalBars - 1 });
-          } catch (e) {
-            chart.timeScale().fitContent();
-          }
-        }
+        chart.timeScale().fitContent();
         
         // Update quality indicators
         if (metadata) {
           updateQualityIndicators(metadata);
         }
         
+        updateIndicators();
         updateStats();
         
         console.log(`Chart updated with ${candleData.length} candles`);
@@ -1075,26 +928,18 @@
       }
     }
 
-    // Lazy loading history with debounce
-    let checkHistoryTimeout = null;
+    // Lazy loading history
     async function checkAndLoadHistory() {
-      if (!candleSeries || isLoadingHistory || !oldestTimestamp || !candleData.length) return;
+      if (!candleSeries || isLoadingHistory || !oldestTimestamp) return;
       
-      // Debounce para evitar múltiplas chamadas rápidas
-      if (checkHistoryTimeout) {
-        clearTimeout(checkHistoryTimeout);
-      }
-      
-      checkHistoryTimeout = setTimeout(async () => {
-        const visibleLogicalRange = chart.timeScale().getVisibleLogicalRange();
-        if (!visibleLogicalRange) return;
+      const visibleLogicalRange = chart.timeScale().getVisibleLogicalRange();
+      if (!visibleLogicalRange) return;
 
-        const threshold = candleData.length * 0.2;
-        if (visibleLogicalRange.from < threshold) {
-          console.log('📥 Near edge, loading more history...');
-          await loadMoreHistory();
-        }
-      }, 300); // 300ms de debounce
+      const threshold = candleData.length * 0.2;
+      if (visibleLogicalRange.from < threshold) {
+        console.log('📥 Near edge, loading more history...');
+        await loadMoreHistory();
+      }
     }
 
     async function loadMoreHistory() {
@@ -1107,11 +952,6 @@
       
       try {
         console.log(`Loading more history before ${new Date(oldestTimestamp).toISOString()}`);
-        
-        // Salva a posição atual do gráfico
-        const timeScale = chart.timeScale();
-        const currentVisibleRange = timeScale.getVisibleLogicalRange();
-        const scrollPosition = timeScale.scrollPosition();
         
         const response = await fetch(`/api/swap/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${limit}&endTime=${oldestTimestamp - 1}`);
         if (!response.ok) throw new Error(`${response.status}`);
@@ -1140,33 +980,15 @@
           color: +c.close >= +c.open ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)'
         }));
         
-        // Prepend new data
         candleData = [...newCandles, ...candleData];
         volumeData = [...newVolume, ...volumeData];
         
-        // Update series data (this will preserve the view)
         candleSeries.setData(candleData);
         volumeSeries.setData(volumeData);
         
         oldestTimestamp = klines[0].time;
         
-        // Restaura a posição do gráfico após o carregamento
-        // Ajusta o range para manter a visualização relativa
-        if (currentVisibleRange) {
-          const newFrom = currentVisibleRange.from + newCandles.length;
-          const newTo = currentVisibleRange.to + newCandles.length;
-          
-          requestAnimationFrame(() => {
-            try {
-              timeScale.setVisibleLogicalRange({
-                from: newFrom,
-                to: newTo
-              });
-            } catch (e) {
-              console.warn('Could not restore scroll position:', e);
-            }
-          });
-        }
+        updateIndicators();
         
         console.log(`Total candles now: ${candleData.length}`);
       } catch (e) {
@@ -1176,64 +998,24 @@
       }
     }
 
-    // HTTP polling fallback
-    function startHttpPolling() {
-      stopHttpPolling();
-      const interval = $("interval").value;
-      const delays = { '1m': 5_000, '5m': 15_000, '15m': 30_000, '30m': 60_000, '1h': 60_000, '2h': 120_000, '4h': 120_000, '6h': 180_000, '12h': 300_000, '1d': 300_000, '1w': 600_000 };
-      const delay = delays[interval] || 10_000;
-      const symbol = $("symbol").value;
-      httpPollId = setInterval(async () => {
-        try {
-          const resp = await fetch(`/api/swap/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=2`);
-          if (!resp.ok) return;
-          const data = await resp.json();
-          const kl = data.klines || data;
-          if (kl && kl.length) {
-            const c = kl[kl.length - 1];
-            upsertCandle(c.time, c.open, c.high, c.low, c.close, c.volume);
-          }
-        } catch (_) {}
-      }, delay);
-      showToast('Modo HTTP polling ativo', 'warn', 2000);
-    }
-    function stopHttpPolling() {
-      if (httpPollId) {
-        clearInterval(httpPollId);
-        httpPollId = null;
-      }
-    }
-
     // WebSocket connection
     function connectWebSocket() {
       if (ws) { 
         try { ws.close(); } catch (_) {} 
       }
       
-      if (connMode === 'http') {
-        // Forçar polling, não abrir WS
-        startHttpPolling();
-        updateWSStatus('disconnected');
-        return;
-      }
-
       updateWSStatus('connecting');
       
       const symbol = $("symbol").value;
       const interval = $("interval").value;
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const limit = $("limit").value || 500;
-  const url = `${proto}://${location.host}/ws/swap/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${encodeURIComponent(limit)}`;
+      const url = `${proto}://${location.host}/ws/swap/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}`;
       
       ws = new WebSocket(url);
       
       ws.onopen = () => {
         updateWSStatus('connected');
         console.log('WebSocket connected');
-        showToast('Conectado ao stream', 'success', 1800);
-        wsAttempts = 0;
-        wsCoolDownUntil = 0;
-        stopHttpPolling();
       };
       
       ws.onmessage = (ev) => {
@@ -1242,14 +1024,9 @@
           
           if (msg.type === 'snapshot') {
             console.log(`WS Snapshot received: ${msg.data?.length || 0} candles`);
-            if (!chart) { createChart(); applySavedChartPrefs(); }
+            if (!chart) createChart();
             
             const rows = msg.data || [];
-            if (rows.length === 0) {
-              console.warn('Empty snapshot received, keeping existing data');
-              return;
-            }
-            
             candleData = rows.map(c => ({
               time: Math.floor(c.time / 1000),
               open: +c.open,
@@ -1264,34 +1041,16 @@
               color: +c.close >= +c.open ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)'
             }));
             
-            if (candleSeries && volumeSeries) {
-              candleSeries.setData(candleData);
-              volumeSeries.setData(volumeData);
-              
-              // Ajuste inicial em snapshot WS
-              const totalBarsWS = candleData.length;
-              if (totalBarsWS > 0) {
-                const target = Math.min(300, totalBarsWS);
-                try {
-                  chart.timeScale().setVisibleLogicalRange({ from: totalBarsWS - target, to: totalBarsWS - 1 });
-                } catch (e) {
-                  chart.timeScale().fitContent();
-                }
-              }
-            }
+            candleSeries.setData(candleData);
+            volumeSeries.setData(volumeData);
+            chart.timeScale().fitContent();
             
+            updateIndicators();
             updateStats();
             
           } else if (msg.type === 'kline') {
             const c = msg.data;
-            if (c && c.time && c.open && c.close) {
-              upsertCandle(c.time, c.open, c.high, c.low, c.close, c.volume);
-            }
-          } else if (msg.type === 'keepalive') {
-            // ignorar
-          } else if (msg.type === 'error') {
-            console.error('WS Error:', msg.message);
-            showToast(`Erro: ${msg.message}`, 'error', 3000);
+            upsertCandle(c.time, c.open, c.high, c.low, c.close, c.volume);
           }
         } catch (e) {
           console.error('WebSocket message error:', e);
@@ -1300,24 +1059,8 @@
       
       ws.onclose = () => {
         updateWSStatus('disconnected');
-        wsAttempts += 1;
-        console.log('WebSocket disconnected, attempts=', wsAttempts);
-        showToast('Conexão perdida. Reconnecting...', 'error', 2200);
-        // Ativa fallback HTTP após algumas tentativas quando em modo auto
-        if (connMode === 'auto' && wsAttempts >= 3 && !httpPollId) {
-          startHttpPolling();
-        }
-        // Exponential backoff com jitter e cooldown
-        const base = 2000;
-        const jitter = Math.floor(Math.random() * 500);
-        const delay = Math.min(30000, base * Math.pow(2, Math.min(wsAttempts, 4)) + jitter);
-        const now = Date.now();
-        const wait = Math.max(0, (wsCoolDownUntil || 0) - now, delay);
-        if (wsAttempts >= 7 && wsCoolDownUntil === 0) {
-          wsCoolDownUntil = now + 120000; // 2 minutos
-        }
-        if (wsReconnectTimer) clearTimeout(wsReconnectTimer);
-        wsReconnectTimer = setTimeout(connectWebSocket, wait);
+        console.log('WebSocket disconnected, reconnecting...');
+        setTimeout(connectWebSocket, 2000);
       };
       
       ws.onerror = (err) => {
@@ -1325,29 +1068,6 @@
         console.error('WebSocket error:', err);
         try { ws.close(); } catch (_) {}
       };
-    }
-
-    // Toggle de modo de conexão (Auto/WS/HTTP)
-    function toggleConnMode() {
-      const btn = $('toggle-conn');
-      if (connMode === 'auto') {
-        connMode = 'ws';
-        btn.textContent = '🌐 WS';
-        showToast('Modo de conexão: WebSocket', 'info', 1200);
-        stopHttpPolling();
-        connectWebSocket();
-      } else if (connMode === 'ws') {
-        connMode = 'http';
-        btn.textContent = '🌐 HTTP';
-        showToast('Modo de conexão: HTTP polling', 'warn', 1500);
-        if (ws) { try { ws.close(); } catch (_) {} }
-        startHttpPolling();
-      } else {
-        connMode = 'auto';
-        btn.textContent = '🌐 Auto';
-        showToast('Modo de conexão: Automático', 'info', 1200);
-        connectWebSocket();
-      }
     }
 
     // Handle chart changes
@@ -1358,15 +1078,6 @@
       // Update stats periodically
       updateStats();
       setInterval(updateStats, 5000);
-
-      // Update favorites UI and persist last symbol/interval/limit
-      updateFavoriteButton();
-      renderFavorites();
-      try {
-        localStorage.setItem(LS_KEYS.lastSymbol, JSON.stringify($("symbol").value));
-        localStorage.setItem(LS_KEYS.lastInterval, JSON.stringify($("interval").value));
-        localStorage.setItem(LS_KEYS.lastLimit, JSON.stringify($("limit").value));
-      } catch {}
     }
 
     // Toolbar controls
@@ -1386,93 +1097,24 @@
       if (volumeSeries) {
         volumeSeries.applyOptions({ visible: isActive });
       }
-      try { localStorage.setItem(LS_KEYS.volumeVisible, JSON.stringify(isActive)); } catch {}
-    }
-
-    function toggleFullscreen() {
-      document.body.classList.toggle('sidebar-hidden');
-      try { localStorage.setItem('st:sidebarHidden', JSON.stringify(document.body.classList.contains('sidebar-hidden'))); } catch {}
-      // Força resize do gráfico
-      if (chart) {
-        setTimeout(() => {
-          const container = $('chart');
-          chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
-          chart.timeScale().fitContent();
-        }, 50);
-      }
     }
 
     // Event listeners
     document.addEventListener('DOMContentLoaded', () => {
       console.log('SmartTrade Pro initialized');
       
-      $('symbol').addEventListener('change', () => {
-        const sym = $('symbol').value;
-        showToast(`Símbolo: ${sym}`, 'info', 1200);
-        handleChange();
-      });
-      $('interval').addEventListener('change', () => {
-        // Sincroniza botões de timeframe
-        const tf = $('interval').value;
-        document.querySelectorAll('#tf-buttons .tf-btn').forEach(b => {
-          b.classList.toggle('active', b.dataset.tf === tf);
-        });
-        handleChange();
-      });
+      $('symbol').addEventListener('change', handleChange);
+      $('interval').addEventListener('change', handleChange);
       $('limit').addEventListener('change', handleChange);
       $('reset-zoom').addEventListener('click', resetZoom);
       $('fit-content').addEventListener('click', fitContent);
       $('toggle-volume').addEventListener('click', toggleVolume);
-  $('toggle-conn').addEventListener('click', toggleConnMode);
-  $('toggle-fullscreen').addEventListener('click', toggleFullscreen);
-      $('toggle-favorite').addEventListener('click', toggleFavorite);
-
-      // Restaurar estado do botão de volume
-      try {
-        const volVisible = JSON.parse(localStorage.getItem(LS_KEYS.volumeVisible) || 'true');
-        $('toggle-volume').classList.toggle('active', !!volVisible);
-      } catch {}
-
-      // Timeframe buttons handlers
-      document.querySelectorAll('#tf-buttons .tf-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const tf = btn.dataset.tf;
-          $('interval').value = tf;
-          document.querySelectorAll('#tf-buttons .tf-btn').forEach(b => b.classList.remove('active'));
-          btn.classList.add('active');
-          handleChange();
-        });
-      });
-      renderFavorites();
       
       loadAvailableSymbols().then(() => {
-        // Restaurar últimas preferências se existirem
-        const lastSym = loadJSON(LS_KEYS.lastSymbol, 'BTC-USDT');
-        const lastInt = loadJSON(LS_KEYS.lastInterval, '15m');
-        const lastLimit = loadJSON(LS_KEYS.lastLimit, 500);
-        $('symbol').value = lastSym;
-        $('interval').value = lastInt;
-        // Atualiza botões de timeframe de acordo com o valor restaurado
-        document.querySelectorAll('#tf-buttons .tf-btn').forEach(b => {
-          b.classList.toggle('active', b.dataset.tf === lastInt);
-        });
-        $('limit').value = lastLimit;
-        // Restaurar modo de tela cheia (sidebar)
-        const sidebarHidden = loadJSON('st:sidebarHidden', false);
-        if (sidebarHidden) document.body.classList.add('sidebar-hidden');
-        // Começa em modo automático de conexão
-        $('toggle-conn').textContent = '🌐 Auto';
-        updateFavoriteButton();
-        renderFavorites();
+        $('symbol').value = 'BTC-USDT';
         handleChange();
       });
     });
   </script>
-  
-  <!-- Floating Action Button -->
-  <a href="/analysis.html" class="fab" title="Análise Multi-Timeframe SMC">
-    <span class="fab-tooltip">Análise Multi-Timeframe</span>
-    📊
-  </a>
 </body>
 </html>
