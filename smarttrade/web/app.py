@@ -15,6 +15,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from ..bingx_client import BingXClient, BingXError, BingXAPIError
+from ..bingx_ws import get_ws_manager
 from ..config import app_config, web_config
 from ..storage import get_storage
 from prometheus_client import generate_latest, CollectorRegistry, CONTENT_TYPE_LATEST
@@ -53,6 +54,24 @@ class MetricsMiddleware(BaseHTTPMiddleware):
         return response
 
 
+# Cliente global com connection pool (singleton)
+_client: Optional[BingXClient] = None
+
+
+def get_client() -> BingXClient:
+    """
+    Retorna instância singleton do cliente BingX.
+    
+    Garante que apenas uma instância existe durante toda a vida da aplicação,
+    permitindo reuso de conexões e melhor performance.
+    """
+    global _client
+    if _client is None:
+        logger.info("Initializing BingXClient singleton")
+        _client = BingXClient()
+    return _client
+
+
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
@@ -70,11 +89,17 @@ async def lifespan(app: FastAPI):
     get_client()
     # Inicializa o storage
     get_storage()
+    # Inicia WebSocket Manager
+    await get_ws_manager().start()
     
     yield
     
     """Limpeza ao desligar a aplicação"""
     logger.info("Shutting down SmartTrade Web")
+    
+    # Para WebSocket Manager
+    await get_ws_manager().stop()
+    
     global _client
     if _client:
         _client.close()
@@ -91,6 +116,10 @@ app = FastAPI(
     description="Interface web para dados reais da BingX (Spot e Swap)",
     lifespan=lifespan
 )
+
+# Configurar diretório estático
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 
 # Cache simples em memória com TTL
@@ -609,144 +638,53 @@ async def ws_swap_klines(
     limit: int = 500,
 ) -> None:
     """
-    WebSocket para streaming de klines (perp) com polling inteligente.
-    
-    Envia snapshot inicial seguido de updates incrementais.
-    O intervalo de polling é ajustado dinamicamente baseado no timeframe.
-    
-    Args:
-        websocket: Conexão WebSocket
-        symbol: Par de negociação
-        interval: Intervalo temporal
+    WebSocket para streaming de klines (perp) usando conexão real com BingX.
     """
     await websocket.accept()
-    ACTIVE_WEBSOCKETS.inc()  # Incrementa contador de WS ativos
+    ACTIVE_WEBSOCKETS.inc()
     
-    logger.info(
-        f"WebSocket connected",
-        extra={"symbol": symbol, "interval": interval}
-    )
+    logger.info(f"WebSocket connected: {symbol} {interval}")
     
-    last_time: int | None = None
-    last_send_ts: float = time.time()
-    keepalive_interval = 10.0  # Reduzido para 10s para evitar timeouts de proxy/load balancer
-    ws_closed = False
+    ws_manager = get_ws_manager()
+    queue = asyncio.Queue()
     
-    async def safe_send(data: dict) -> bool:
-        """Envia dados apenas se WebSocket estiver aberto"""
-        if ws_closed:
-            return False
-        try:
-            await websocket.send_json(data)
-            return True
-        except Exception as e:
-            logger.debug(f"Failed to send WebSocket message: {e}")
-            return False
+    async def on_kline_update(data: dict):
+        await queue.put(data)
     
     try:
-        # Enviar snapshot inicial
+        # 1. Enviar snapshot inicial via REST (para ter histórico imediato)
         try:
-            # Sanitiza limite do snapshot (máximo da BingX é 1440)
             safe_limit = max(50, min(int(limit or 500), 1440))
-
             def fetch_snapshot():
                 client = get_client()
                 return client.swap_klines(symbol, interval, safe_limit)
 
             kl = await asyncio.to_thread(fetch_snapshot)
-            
-            if await safe_send({"type": "snapshot", "data": kl}):
-                if kl:
-                    last_time = kl[-1].get("time")
-                
-                logger.info(
-                    f"Sent snapshot",
-                    extra={"symbol": symbol, "candles": len(kl)}
-                )
-            
+            await websocket.send_json({"type": "snapshot", "data": kl})
         except Exception as e:
             logger.error(f"Error sending snapshot: {e}")
-            # Não envia erro fatal no snapshot, tenta continuar para o loop
-            # await safe_send({"type": "error", "message": str(e)})
 
-        # Polling dinâmico baseado no intervalo
-        # Intervalos menores = polling mais frequente
-        poll_intervals = {
-            "1m": 5.0,
-            "5m": 15.0,
-            "15m": 30.0,
-            "30m": 60.0,
-            "1h": 60.0,
-            "2h": 120.0,
-            "4h": 120.0,
-            "6h": 180.0,
-            "12h": 300.0,
-            "1d": 300.0,
-            "1w": 600.0,
-        }
-        poll_delay = poll_intervals.get(interval, 10.0)
+        # 2. Inscrever no WebSocket Manager
+        await ws_manager.subscribe(symbol, interval, on_kline_update)
         
-        logger.debug(f"Using poll delay: {poll_delay}s for interval {interval}")
-        
-        # Loop de atualização incremental
+        # 3. Loop de envio de updates
         while True:
-            # Dorme pequenos intervalos para intercalar keepalive
-            sleep_left = poll_delay
-            step = min(keepalive_interval / 2, 2.0) # Step menor para verificar keepalive mais frequentemente
-            while sleep_left > 0:
-                await asyncio.sleep(min(step, sleep_left))
-                sleep_left -= step
-
-                # Envia keepalive se necessário (importante para timeframes longos)
-                now_ts = time.time()
-                if now_ts - last_send_ts >= keepalive_interval:
-                    if await safe_send({"type": "keepalive", "ts": int(now_ts * 1000)}):
-                        last_send_ts = now_ts
-                    else:
-                        break  # WebSocket fechado
-
-            def fetch_latest():
-                client = get_client()
-                return client.swap_klines(symbol, interval, 2)
-
+            # Espera por dados da fila (com timeout para keepalive)
             try:
-                latest = await asyncio.to_thread(fetch_latest)
-            except Exception as e:
-                # Erros transientes (rede, timeout da BingX) são normais.
-                # Apenas logamos como warning e tentamos novamente no próximo ciclo.
-                # Não enviamos erro ao cliente para evitar desconexão ou alertas visuais desnecessários.
-                logger.warning(f"Transient error fetching klines (will retry): {e}")
-                continue
-
-            if not latest:
-                continue
-
-            cur = latest[-1]
-            cur_time = cur.get("time")
-            
-            # Envia se for candle novo ou atualização do atual
-            if last_time is None or cur_time != last_time or cur_time > last_time:
-                if not await safe_send({"type": "kline", "data": cur}):
-                    break  # WebSocket fechado
-                last_time = cur_time
-                last_send_ts = time.time()
+                data = await asyncio.wait_for(queue.get(), timeout=20.0)
+                await websocket.send_json({"type": "kline", "data": data})
+            except asyncio.TimeoutError:
+                # Envia keepalive se não houver dados por 20s
+                await websocket.send_json({"type": "keepalive", "ts": int(time.time() * 1000)})
                 
     except WebSocketDisconnect:
-        ws_closed = True
-        logger.info(
-            f"WebSocket disconnected",
-            extra={"symbol": symbol, "interval": interval}
-        )
+        logger.info(f"WebSocket disconnected: {symbol}")
     except Exception as e:
-        ws_closed = True
-        logger.error(f"WebSocket error: {e}", exc_info=True)
-        try:
-            await websocket.close()
-        except:
-            pass
+        logger.error(f"WebSocket error: {e}")
     finally:
-        ws_closed = True
-        ACTIVE_WEBSOCKETS.dec()  # Decrementa contador de WS ativos
+        # Remove inscrição ao desconectar
+        await ws_manager.unsubscribe(symbol, interval, on_kline_update)
+        ACTIVE_WEBSOCKETS.dec()
 
 
 # ===== Smart Money Concepts Endpoints =====
@@ -1163,8 +1101,12 @@ async def api_indicator_ranking(
     try:
         from ..multi_timeframe_analysis import MultiTimeframeAnalyzer
         
-        valid_indicators = ["Order Block", "Fair Value Gap", "Fibonacci"]
+        valid_indicators = ["Order Block", "Fair Value Gap", "Fibonacci", "CISD"]
         indicator_normalized = indicator_name.replace("-", " ").replace("_", " ").title()
+        
+        # Handle CISD specifically since title() makes it "Cisd"
+        if indicator_normalized.upper() == "CISD":
+            indicator_normalized = "CISD"
         
         if indicator_normalized not in valid_indicators:
             raise HTTPException(
@@ -1474,7 +1416,7 @@ async def api_predict_with_smc(
             
             # 3. Fibonacci
             fibo_analyzer = FibonacciAnalyzer()
-            fibo_retracements = fibo_analyzer.calculate_auto_retracements(klines, lookback=100)
+            fibo_retracements = fibo_analyzer.calculate_auto_retracements(klines, lookback_period=100)
             
             # Combinar tudo
             result = {
@@ -1508,14 +1450,14 @@ async def api_predict_with_smc(
             # Checar Order Blocks próximos
             obs = smc_result.get("order_blocks", [])
             for ob in obs[:5]:  # Top 5 OBs
-                ob_mid = (ob["high"] + ob["low"]) / 2
+                ob_mid = (ob["top"] + ob["bottom"]) / 2
                 distance_pct = abs((predicted_price - ob_mid) / predicted_price) * 100
                 
                 if distance_pct < 5:  # Dentro de 5%
                     confluences.append({
                         "type": "order_block",
                         "direction": ob["type"],
-                        "price_range": [ob["low"], ob["high"]],
+                        "price_range": [ob["bottom"], ob["top"]],
                         "distance_pct": round(distance_pct, 2),
                         "strength": "strong" if distance_pct < 2 else "medium",
                         "note": f"Predição próxima a Order Block {ob['type']}"
@@ -1524,14 +1466,14 @@ async def api_predict_with_smc(
             # Checar FVGs
             fvgs = smc_result.get("fair_value_gaps", [])
             for fvg in fvgs[:5]:
-                fvg_mid = (fvg["high"] + fvg["low"]) / 2
+                fvg_mid = (fvg["top"] + fvg["bottom"]) / 2
                 distance_pct = abs((predicted_price - fvg_mid) / predicted_price) * 100
                 
                 if distance_pct < 5:
                     confluences.append({
                         "type": "fvg",
                         "direction": fvg["type"],
-                        "price_range": [fvg["low"], fvg["high"]],
+                        "price_range": [fvg["bottom"], fvg["top"]],
                         "distance_pct": round(distance_pct, 2),
                         "strength": "medium",
                         "note": f"Predição próxima a Fair Value Gap {fvg['type']}"
@@ -1635,6 +1577,78 @@ async def api_compare_backtest_models(
         
     except Exception as e:
         logger.exception(f"Error in backtest comparison: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/market/scan")
+async def api_market_scan(
+    timeframe: str = Query("15m", description="Timeframe para análise (opcional, se omitido usa multi-tf)"),
+    limit: int = Query(200, ge=100, le=1440, description="Candles para backtest"),
+    category: str = Query("majors", description="Categoria de ativos: majors, defi, all"),
+):
+    """
+    Escaneia o mercado em busca das melhores oportunidades SMC.
+    
+    Analisa múltiplos ativos simultaneamente e retorna um ranking baseado em:
+    - Score SMC (respeito a Order Blocks/FVG)
+    - Win Rate recente
+    - Tendência
+    """
+    try:
+        from ..market_scanner import MarketScanner
+        from ..data_provider import DataProvider
+        
+        logger.info(f"Market scan requested: {category}")
+        
+        # Define lista de ativos baseada na categoria
+        symbols = None
+        if category == "majors":
+            symbols = MarketScanner.TOP_ASSETS
+        elif category == "defi":
+            symbols = ["UNI-USDT", "AAVE-USDT", "MKR-USDT", "SNX-USDT", "CRV-USDT", "COMP-USDT", "YFI-USDT", "SUSHI-USDT"]
+        # Se 'all' ou outro, usa default (TOP_ASSETS) por enquanto para segurança
+        
+        async def run_scan():
+            scanner = MarketScanner()
+            client = get_client()
+            
+            # Cria DataProvider com o client BingX existente
+            provider = DataProvider(bingx_client=client)
+            
+            # Se timeframe for "auto" ou não especificado, usa lista padrão
+            scan_timeframes = ["15m", "1h", "4h"]
+            
+            try:
+                results = await scanner.scan_market(
+                    symbols=symbols,
+                    timeframes=scan_timeframes,
+                    limit_candles=limit,
+                    data_provider=provider
+                )
+            finally:
+                # Fecha conexões extras (CCXT)
+                await provider.close()
+            
+            return {
+                "timestamp": int(time.time() * 1000),
+                "timeframe": "multi",
+                "assets_scanned": len(results),
+                "results": results
+            }
+        
+        # Executa scan
+        # Nota: isso pode demorar alguns segundos
+        result = await run_scan()
+        
+        logger.info(
+            f"Market scan completed",
+            extra={"scanned": result["assets_scanned"], "top_asset": result["results"][0]["symbol"] if result["results"] else None}
+        )
+        
+        return JSONResponse(content=result)
+        
+    except Exception as e:
+        logger.exception(f"Error in market scan: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

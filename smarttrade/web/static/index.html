@@ -500,6 +500,8 @@
   
   <button onclick="window.location.href='/analysis.html'" title="Ir para Análise Multi-Timeframe" style="background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; font-weight: 600;">📊 Análise SMC</button>
   
+  <button onclick="window.location.href='/static/scanner.html'" title="Escanear Mercado" style="background: linear-gradient(135deg, #f59e0b, #d97706); color: white; font-weight: 600; margin-left:8px;">📡 Scanner</button>
+  
   <button onclick="window.location.href='/static/prediction_overlay.html'" title="Abrir painel de predições" style="background: linear-gradient(135deg, #10b981, #34d399); color: white; font-weight: 600; margin-left:8px;">🔮 Predições</button>
   
   <div class="divider"></div>
@@ -713,6 +715,8 @@
             top: 0.1,
             bottom: 0.2,
           },
+          // Permitir movimento livre vertical (desativa auto-scale fixo)
+          autoScale: false,
         },
         timeScale: {
           borderColor: 'rgba(255, 255, 255, 0.1)',
@@ -735,6 +739,10 @@
           mouseWheel: true,
           pinch: true,
         },
+        kineticScroll: {
+          touch: true,
+          mouse: true,
+        },
       });
 
       // Candlestick series
@@ -750,7 +758,7 @@
 
       // Volume histogram (bottom pane)
       volumeSeries = chart.addHistogramSeries({
-        color: '#6366f1',
+        color: 'rgba(148, 163, 184, 0.15)',
         priceFormat: {
           type: 'volume',
         },
@@ -922,7 +930,7 @@
       const volumePoint = {
         time: candleTime,
         value: +volume,
-        color: +close >= +open ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)'
+        color: 'rgba(148, 163, 184, 0.15)'
       };
       
       candleSeries.update(candle);
@@ -1041,7 +1049,7 @@
         volumeData = klines.map(c => ({
           time: Math.floor(c.time / 1000),
           value: +c.volume,
-          color: +c.close >= +c.open ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)'
+          color: 'rgba(148, 163, 184, 0.15)'
         }));
         
         candleSeries.setData(candleData);
@@ -1057,6 +1065,11 @@
           const target = Math.min(300, totalBars);
           try {
             chart.timeScale().setVisibleLogicalRange({ from: totalBars - target, to: totalBars - 1 });
+            // Snap price scale para garantir visibilidade inicial
+            chart.priceScale('right').applyOptions({ autoScale: true });
+            setTimeout(() => {
+                chart.priceScale('right').applyOptions({ autoScale: false });
+            }, 50);
           } catch (e) {
             chart.timeScale().fitContent();
           }
@@ -1100,12 +1113,14 @@
     }
 
     async function loadMoreHistory() {
-      if (isLoadingHistory) return;
+      if (isLoadingHistory || !oldestTimestamp) return;
       isLoadingHistory = true;
       
       const symbol = $("symbol").value;
       const interval = $("interval").value;
-      const limit = 500;
+      // Usa o limite configurado, mas garante pelo menos 500 para eficiência
+      const userLimit = parseInt($("limit").value) || 500;
+      const limit = Math.max(500, Math.min(userLimit, 1000));
       
       try {
         console.log(`Loading more history before ${new Date(oldestTimestamp).toISOString()}`);
@@ -1139,14 +1154,23 @@
         const newVolume = klines.map(c => ({
           time: Math.floor(c.time / 1000),
           value: +c.volume,
-          color: +c.close >= +c.open ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)'
+          color: 'rgba(148, 163, 184, 0.15)'
         }));
         
-        // Prepend new data
-        candleData = [...newCandles, ...candleData];
-        volumeData = [...newVolume, ...volumeData];
+        // Merge with existing data using Map to prevent duplicates and ensure sorting
+        const candleMap = new Map();
+        newCandles.forEach(c => candleMap.set(c.time, c));
+        candleData.forEach(c => candleMap.set(c.time, c));
         
-        // Update series data (this will preserve the view)
+        const volumeMap = new Map();
+        newVolume.forEach(v => volumeMap.set(v.time, v));
+        volumeData.forEach(v => volumeMap.set(v.time, v));
+        
+        // Convert back to array and sort
+        candleData = Array.from(candleMap.values()).sort((a, b) => a.time - b.time);
+        volumeData = Array.from(volumeMap.values()).sort((a, b) => a.time - b.time);
+        
+        // Update series data
         candleSeries.setData(candleData);
         volumeSeries.setData(volumeData);
         
@@ -1263,7 +1287,7 @@
             const newVolume = rows.map(c => ({
               time: Math.floor(c.time / 1000),
               value: +c.volume,
-              color: +c.close >= +c.open ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)'
+              color: 'rgba(148, 163, 184, 0.15)'
             }));
             
             // Merge snapshot with existing data to prevent history loss
@@ -1321,15 +1345,7 @@
         updateWSStatus('disconnected');
         wsAttempts += 1;
         console.log('WebSocket disconnected, attempts=', wsAttempts);
-        
-        // Feedback visual mais suave para reconexões
-        if (wsAttempts > 1) {
-            showToast(`Reconectando... (${wsAttempts})`, 'warn', 2000);
-        } else {
-            // Primeira queda, tenta reconectar silenciosamente ou com aviso discreto
-            console.log('Connection lost, retrying immediately...');
-        }
-
+        showToast('Conexão perdida. Reconnecting...', 'error', 2200);
         // Ativa fallback HTTP após algumas tentativas quando em modo auto
         if (connMode === 'auto' && wsAttempts >= 3 && !httpPollId) {
           startHttpPolling();
@@ -1405,6 +1421,11 @@
     function fitContent() {
       if (!chart) return;
       chart.timeScale().fitContent();
+      // Força um auto-scale momentâneo para enquadrar o preço
+      chart.priceScale('right').applyOptions({ autoScale: true });
+      setTimeout(() => {
+        chart.priceScale('right').applyOptions({ autoScale: false });
+      }, 100);
     }
 
     function toggleVolume() {

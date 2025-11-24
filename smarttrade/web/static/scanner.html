@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SmartTrade - Market Scanner</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body { 
+      font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; 
+      background: #0a0e27; 
+      color: #e2e8f0; 
+      min-height: 100vh;
+      padding: 1rem;
+    }
+    
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.95));
+      backdrop-filter: blur(10px);
+      padding: 1.5rem;
+      border-radius: 12px;
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      margin-bottom: 1.5rem;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    
+    .header-title h1 {
+      font-size: 1.8rem;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    .header-title p {
+      color: #94a3b8;
+      font-size: 0.95rem;
+    }
+    
+    /* Controls */
+    .controls {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    
+    select, button {
+      padding: 0.6rem 1rem;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(15, 23, 42, 0.8);
+      color: #e2e8f0;
+      font: inherit;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    
+    select:hover {
+      border-color: rgba(99, 102, 241, 0.5);
+    }
+    
+    select:focus {
+      outline: none;
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    }
+    
+    button.primary {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      border: none;
+      color: white;
+      font-weight: 600;
+    }
+    
+    button.primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
+    }
+    
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    /* Table */
+    .table-container {
+      background: rgba(30, 41, 59, 0.5);
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      overflow-x: auto;
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 800px;
+    }
+    
+    th, td {
+      padding: 1rem;
+      text-align: left;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    th {
+      background: rgba(15, 23, 42, 0.6);
+      color: #94a3b8;
+      font-weight: 600;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      user-select: none;
+    }
+    
+    th:hover {
+      color: #e2e8f0;
+      background: rgba(15, 23, 42, 0.8);
+    }
+    
+    tr:last-child td {
+      border-bottom: none;
+    }
+    
+    tr:hover td {
+      background: rgba(99, 102, 241, 0.05);
+    }
+    
+    .symbol-cell {
+      font-weight: 600;
+      color: #e2e8f0;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    .score-badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 700;
+    }
+    
+    .score-high { background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .score-med { background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .score-low { background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+    
+    .action-btn {
+      padding: 0.4rem 0.8rem;
+      font-size: 0.8rem;
+      background: rgba(99, 102, 241, 0.1);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      color: #a5b4fc;
+    }
+    
+    .action-btn:hover {
+      background: rgba(99, 102, 241, 0.2);
+      color: white;
+    }
+    
+    /* Loading */
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 3rem;
+      color: #94a3b8;
+    }
+    
+    .loading.active {
+      display: block;
+    }
+    
+    .spinner {
+      border: 3px solid rgba(99, 102, 241, 0.2);
+      border-top: 3px solid #6366f1;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 1rem;
+    }
+    
+    @keyframes spin { to { transform: rotate(360deg); } }
+    
+    /* Nav */
+    .nav-link {
+      text-decoration: none;
+      color: #94a3b8;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+    
+    .nav-link:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: #e2e8f0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-title">
+        <h1>📡 Market Scanner</h1>
+        <p>Encontre os ativos que estão respeitando melhor o SMC agora</p>
+      </div>
+      
+      <div class="controls">
+        <a href="/" class="nav-link">⬅️ Voltar ao Gráfico</a>
+        
+        <select id="category">
+          <option value="majors">Majors (Top 15)</option>
+          <option value="defi">DeFi Blue Chips</option>
+        </select>
+        
+        <select id="timeframe">
+          <option value="5m">5m</option>
+          <option value="15m" selected>15m</option>
+          <option value="1h">1h</option>
+          <option value="4h">4h</option>
+        </select>
+        
+        <button class="primary" id="scanBtn" onclick="runScan()">🔍 Escanear Mercado</button>
+      </div>
+    </div>
+    
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <p>Analisando múltiplos ativos... Isso pode levar alguns segundos.</p>
+      <p style="font-size: 0.85rem; margin-top: 0.5rem;">Calculando backtests e scores de confluência.</p>
+    </div>
+    
+    <div class="table-container" id="results" style="display: none;">
+      <table id="scanTable">
+        <thead>
+          <tr>
+            <th onclick="sortTable(0)">Ativo</th>
+            <th onclick="sortTable(1)">Preço</th>
+            <th onclick="sortTable(2)">SMC Score</th>
+            <th onclick="sortTable(3)">Melhor Estratégia</th>
+            <th onclick="sortTable(4)">Win Rate (Backtest)</th>
+            <th onclick="sortTable(5)">Recomendação</th>
+            <th>Ação</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
+          <!-- Rows injected here -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    
+    async function runScan() {
+      const category = $('category').value;
+      const timeframe = $('timeframe').value;
+      
+      $('results').style.display = 'none';
+      $('loading').classList.add('active');
+      $('scanBtn').disabled = true;
+      
+      // Timeout controller (60 seconds)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+      
+      try {
+        const response = await fetch(`/api/market/scan?category=${category}&timeframe=${timeframe}&limit=200`, {
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Erro na API (${response.status}): ${errorText}`);
+        }
+        
+        const data = await response.json();
+        renderTable(data.results);
+        
+      } catch (error) {
+        if (error.name === 'AbortError') {
+            alert('O scan demorou muito e foi cancelado. Tente selecionar menos ativos ou um timeframe específico.');
+        } else {
+            alert('Erro ao escanear mercado: ' + error.message);
+        }
+      } finally {
+        $('loading').classList.remove('active');
+        $('scanBtn').disabled = false;
+        $('results').style.display = 'block';
+      }
+    }
+    
+    function renderTable(results) {
+      const tbody = $('tableBody');
+      tbody.innerHTML = '';
+      
+      if (!results || results.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center">Nenhum resultado encontrado</td></tr>';
+        return;
+      }
+      
+      results.forEach(r => {
+        const tr = document.createElement('tr');
+        
+        let scoreClass = 'score-low';
+        if (r.smc_score >= 70) scoreClass = 'score-high';
+        else if (r.smc_score >= 40) scoreClass = 'score-med';
+        
+        tr.innerHTML = `
+          <td>
+            <div class="symbol-cell">
+              <img src="https://assets.coincap.io/assets/icons/${r.symbol.split('-')[0].toLowerCase()}@2x.png" 
+                   onerror="this.style.display='none'" 
+                   style="width: 24px; height: 24px; border-radius: 50%;">
+              ${r.symbol}
+            </div>
+          </td>
+          <td>$${parseFloat(r.price).toFixed(r.price < 1 ? 4 : 2)}</td>
+          <td><span class="score-badge ${scoreClass}">${r.smc_score}/100</span></td>
+          <td>${r.best_strategy}</td>
+          <td>${r.win_rate}%</td>
+          <td>${r.recommendation}</td>
+          <td>
+            <button class="action-btn" onclick="openChart('${r.symbol}')">📈 Ver Gráfico</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+    
+    function openChart(symbol) {
+      // Salva no localStorage para o index.html pegar
+      try {
+        localStorage.setItem('st:lastSymbol', JSON.stringify(symbol));
+      } catch {}
+      window.location.href = '/';
+    }
+    
+    // Simple sort function
+    function sortTable(n) {
+      var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+      table = document.getElementById("scanTable");
+      switching = true;
+      dir = "asc"; 
+      while (switching) {
+        switching = false;
+        rows = table.rows;
+        for (i = 1; i < (rows.length - 1); i++) {
+          shouldSwitch = false;
+          x = rows[i].getElementsByTagName("TD")[n];
+          y = rows[i + 1].getElementsByTagName("TD")[n];
+          
+          let xVal = x.innerText.toLowerCase();
+          let yVal = y.innerText.toLowerCase();
+          
+          // Numeric sort for price, score, win rate
+          if (n === 1 || n === 2 || n === 4) {
+            xVal = parseFloat(xVal.replace(/[^0-9.-]+/g,""));
+            yVal = parseFloat(yVal.replace(/[^0-9.-]+/g,""));
+          }
+          
+          if (dir == "asc") {
+            if (xVal > yVal) { shouldSwitch = true; break; }
+          } else if (dir == "desc") {
+            if (xVal < yVal) { shouldSwitch = true; break; }
+          }
+        }
+        if (shouldSwitch) {
+          rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+          switching = true;
+          switchcount ++;      
+        } else {
+          if (switchcount == 0 && dir == "asc") {
+            dir = "desc";
+            switching = true;
+          }
+        }
+      }
+    }
+    
+    // Auto run on load
+    window.addEventListener('load', () => {
+      runScan();
+    });
+  </script>
+</body>
+</html>

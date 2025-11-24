@@ -114,6 +114,9 @@ Painel lateral com métricas ao vivo:
 ### 4. 🔧 Melhorias Técnicas
 
 #### Backend (app.py)
+- **WebSocket Real**: Substituído polling HTTP por conexão WebSocket persistente com a BingX
+- **BingXWSManager**: Novo gerenciador de conexões WebSocket assíncronas
+- **Singleton Client**: Otimização de recursos com instância única do cliente
 - Função `validate_and_enrich_klines()` para validação
 - Detecção de gaps com tolerância de 50%
 - Validação OHLC com verificação de ranges

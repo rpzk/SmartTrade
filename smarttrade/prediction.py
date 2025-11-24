@@ -535,8 +535,13 @@ class TimeSeriesPredictor:
         
         for i in range(periods_ahead):
             pred_price = forecast[i]
-            lower = conf_int.iloc[i, 0]
-            upper = conf_int.iloc[i, 1]
+            # Se treinado com numpy array, conf_int é array, não DataFrame
+            if hasattr(conf_int, 'iloc'):
+                lower = conf_int.iloc[i, 0]
+                upper = conf_int.iloc[i, 1]
+            else:
+                lower = conf_int[i, 0]
+                upper = conf_int[i, 1]
             
             # Confiança baseada na largura do intervalo
             range_pct = ((upper - lower) / pred_price) * 100

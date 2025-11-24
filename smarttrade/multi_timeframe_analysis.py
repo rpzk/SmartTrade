@@ -166,6 +166,7 @@ class MultiTimeframeAnalyzer:
         "Order Block": "orderblock",
         "Fair Value Gap": "fvg",
         "Fibonacci": "fibonacci",
+        "CISD": "cisd",
     }
     
     def __init__(self):
@@ -245,6 +246,10 @@ class MultiTimeframeAnalyzer:
                     )
                 elif strategy_method == "fibonacci":
                     result = self.backtest_engine.test_fibonacci_strategy(
+                        klines_data, symbol, timeframe, risk_reward
+                    )
+                elif strategy_method == "cisd":
+                    result = self.backtest_engine.test_cisd_strategy(
                         klines_data, symbol, timeframe, risk_reward
                     )
                 else:

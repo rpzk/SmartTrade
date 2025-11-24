@@ -162,6 +162,27 @@ class StructureBreak:
         }
 
 
+@dataclass
+class CISD:
+    """Change in State of Delivery (CISD) - Zona de reversão após captura de liquidez"""
+    type: OrderBlockType
+    time: int
+    top: float
+    bottom: float
+    candle_index: int
+    liquidity_swept_level: float
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "type": self.type.value,
+            "time": self.time,
+            "top": self.top,
+            "bottom": self.bottom,
+            "candle_index": self.candle_index,
+            "liquidity_swept_level": self.liquidity_swept_level,
+        }
+
+
 class SMCAnalyzer:
     """Analisador de Smart Money Concepts"""
     
@@ -468,6 +489,62 @@ class SMCAnalyzer:
         
         return breaks
     
+    def find_cisd(self, candles: List[Candle], swing_highs: List[SwingPoint], 
+                 swing_lows: List[SwingPoint]) -> List[CISD]:
+        """
+        Identifica zonas de CISD (Change in State of Delivery).
+        
+        CISD ocorre quando o preço captura liquidez (sweeps) de um swing point
+        e reverte rapidamente. A zona é definida pelo candle que capturou a liquidez.
+        
+        Returns:
+            Lista de zonas CISD
+        """
+        cisd_zones = []
+        
+        if len(candles) < 20:
+            return cisd_zones
+            
+        # Ordena swings por índice
+        all_swings = sorted(swing_highs + swing_lows, key=lambda x: x.index)
+        
+        for swing in all_swings:
+            # Procura por sweep nos candles seguintes
+            for i in range(swing.index + 1, min(swing.index + 20, len(candles))):
+                candle = candles[i]
+                
+                # Bullish CISD: Sweep de Swing Low + Fechamento acima
+                if not swing.is_high: # Swing Low
+                    if candle.low < swing.price: # Capturou liquidez
+                        # Se fechou acima do swing low (sweep confirmado) ou candle seguinte reverteu forte
+                        if candle.close > swing.price or (i+1 < len(candles) and candles[i+1].close > swing.price and candles[i+1].is_bullish):
+                            cisd_zones.append(CISD(
+                                type=OrderBlockType.BULLISH,
+                                time=candle.time,
+                                top=candle.high,
+                                bottom=candle.low,
+                                candle_index=i,
+                                liquidity_swept_level=swing.price
+                            ))
+                            break # Encontrou o sweep, vai para próximo swing
+                
+                # Bearish CISD: Sweep de Swing High + Fechamento abaixo
+                elif swing.is_high: # Swing High
+                    if candle.high > swing.price: # Capturou liquidez
+                        # Se fechou abaixo do swing high ou candle seguinte reverteu forte
+                        if candle.close < swing.price or (i+1 < len(candles) and candles[i+1].close < swing.price and candles[i+1].is_bearish):
+                            cisd_zones.append(CISD(
+                                type=OrderBlockType.BEARISH,
+                                time=candle.time,
+                                top=candle.high,
+                                bottom=candle.low,
+                                candle_index=i,
+                                liquidity_swept_level=swing.price
+                            ))
+                            break
+                            
+        return cisd_zones
+
     def analyze(self, klines_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Análise completa de Smart Money Concepts.
@@ -493,10 +570,11 @@ class SMCAnalyzer:
         fvgs = self.find_fair_value_gaps(candles)
         trend = self.detect_trend(candles, swing_highs, swing_lows)
         structure_breaks = self.find_structure_breaks(candles, swing_highs, swing_lows)
+        cisd_zones = self.find_cisd(candles, swing_highs, swing_lows)
         
         logger.info(
             f"SMC Analysis complete: {len(order_blocks)} OBs, {len(fvgs)} FVGs, "
-            f"{len(swing_highs)} swing highs, {len(swing_lows)} swing lows, trend={trend.value}"
+            f"{len(cisd_zones)} CISDs, {len(swing_highs)} swing highs, {len(swing_lows)} swing lows, trend={trend.value}"
         )
         
         return {
@@ -506,5 +584,6 @@ class SMCAnalyzer:
             "order_blocks": [ob.to_dict() for ob in order_blocks],
             "fair_value_gaps": [fvg.to_dict() for fvg in fvgs],
             "structure_breaks": [sb.to_dict() for sb in structure_breaks],
+            "cisd_zones": [c.to_dict() for c in cisd_zones],
             "total_candles_analyzed": len(candles),
         }
