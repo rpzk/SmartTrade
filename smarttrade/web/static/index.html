@@ -1252,7 +1252,7 @@
               return;
             }
             
-            candleData = rows.map(c => ({
+            const newCandles = rows.map(c => ({
               time: Math.floor(c.time / 1000),
               open: +c.open,
               high: +c.high,
@@ -1260,24 +1260,41 @@
               close: +c.close,
             }));
             
-            volumeData = rows.map(c => ({
+            const newVolume = rows.map(c => ({
               time: Math.floor(c.time / 1000),
               value: +c.volume,
               color: +c.close >= +c.open ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)'
             }));
             
+            // Merge snapshot with existing data to prevent history loss
+            if (candleData.length > 0) {
+              const existingMap = new Map(candleData.map(c => [c.time, c]));
+              const existingVolMap = new Map(volumeData.map(v => [v.time, v]));
+
+              newCandles.forEach(c => existingMap.set(c.time, c));
+              newVolume.forEach(v => existingVolMap.set(v.time, v));
+
+              candleData = Array.from(existingMap.values()).sort((a, b) => a.time - b.time);
+              volumeData = Array.from(existingVolMap.values()).sort((a, b) => a.time - b.time);
+            } else {
+              candleData = newCandles;
+              volumeData = newVolume;
+            }
+            
             if (candleSeries && volumeSeries) {
               candleSeries.setData(candleData);
               volumeSeries.setData(volumeData);
               
-              // Ajuste inicial em snapshot WS
-              const totalBarsWS = candleData.length;
-              if (totalBarsWS > 0) {
-                const target = Math.min(300, totalBarsWS);
-                try {
-                  chart.timeScale().setVisibleLogicalRange({ from: totalBarsWS - target, to: totalBarsWS - 1 });
-                } catch (e) {
-                  chart.timeScale().fitContent();
+              // Ajuste inicial apenas se for o primeiro carregamento
+              if (candleData.length === newCandles.length) {
+                const totalBarsWS = candleData.length;
+                if (totalBarsWS > 0) {
+                  const target = Math.min(300, totalBarsWS);
+                  try {
+                    chart.timeScale().setVisibleLogicalRange({ from: totalBarsWS - target, to: totalBarsWS - 1 });
+                  } catch (e) {
+                    chart.timeScale().fitContent();
+                  }
                 }
               }
             }
@@ -1304,7 +1321,15 @@
         updateWSStatus('disconnected');
         wsAttempts += 1;
         console.log('WebSocket disconnected, attempts=', wsAttempts);
-        showToast('Conexão perdida. Reconnecting...', 'error', 2200);
+        
+        // Feedback visual mais suave para reconexões
+        if (wsAttempts > 1) {
+            showToast(`Reconectando... (${wsAttempts})`, 'warn', 2000);
+        } else {
+            // Primeira queda, tenta reconectar silenciosamente ou com aviso discreto
+            console.log('Connection lost, retrying immediately...');
+        }
+
         // Ativa fallback HTTP após algumas tentativas quando em modo auto
         if (connMode === 'auto' && wsAttempts >= 3 && !httpPollId) {
           startHttpPolling();

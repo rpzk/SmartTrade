@@ -71,6 +71,16 @@ curl "http://localhost:8000/api/predict/BTC-USDT?timeframe=1h&periods=10&model=p
 curl -X POST "http://localhost:8000/api/predict/compare-models?symbol=ETH-USDT&timeframe=4h&periods=10" | python3 -m json.tool
 ```
 
+**Backtest (testar acurácia histórica):**
+```bash
+curl -X POST "http://localhost:8000/api/predict/backtest?symbol=BTC-USDT&timeframe=1h&model=ensemble&limit=1000" | python3 -m json.tool
+```
+
+**Comparar backtest de todos modelos:**
+```bash
+curl -X POST "http://localhost:8000/api/predict/backtest/compare?symbol=ETH-USDT&timeframe=4h" | python3 -m json.tool
+```
+
 ---
 
 ## 📊 Exemplo de Resultado
@@ -107,10 +117,13 @@ curl -X POST "http://localhost:8000/api/predict/compare-models?symbol=ETH-USDT&t
 
 | Modelo | Status | Quando Usar |
 |--------|--------|-------------|
-| **prophet** | ✅ Instalado | Melhor para tendências e sazonalidade |
+| **ensemble** | ✅ Instalado | **MELHOR**: Combina todos os modelos |
+| **prophet** | ✅ Instalado | Tendências e sazonalidade |
+| **lstm** | ✅ Instalado | Padrões complexos e não-lineares |
+| **arima** | ✅ Instalado | Análise estatística clássica |
 | **simple_ma** | ✅ Sempre disponível | Rápido, baseline confiável |
-| **lstm** | ⏳ Não instalado | Padrões complexos (requer tensorflow) |
-| **arima** | ⏳ Não instalado | Análise estatística (requer statsmodels) |
+
+**Recomendação:** Use `model=auto` ou `model=ensemble` para melhores resultados!
 
 ---
 

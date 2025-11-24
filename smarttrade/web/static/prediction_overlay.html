@@ -17,7 +17,8 @@
     <label>Símbolo <input id="symbol" type="text" value="BTC-USDT" /></label>
     <label>Intervalo <select id="interval"><option>1m</option><option>5m</option><option>15m</option><option selected>1h</option><option>4h</option><option>1d</option></select></label>
     <label>Períodos <input id="periods" type="number" value="10" min="1" max="50" style="width:72px"/></label>
-    <label>Modelo <select id="model"><option value="auto">auto</option><option value="simple_ma">simple_ma</option><option value="prophet">prophet</option></select></label>
+    <label>Modelo <select id="model"><option value="auto">auto</option><option value="ensemble">ensemble</option><option value="prophet">prophet</option><option value="lstm">lstm</option><option value="arima">arima</option><option value="simple_ma">simple_ma</option></select></label>
+    <label style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="show-smc" checked /> SMC</label>
     <button id="btn-refresh">Atualizar</button>
     <div style="margin-left:auto" class="info" id="summary">—</div>
   </div>

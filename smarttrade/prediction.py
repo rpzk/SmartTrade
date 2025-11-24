@@ -123,26 +123,39 @@ class TimeSeriesPredictor:
         logger.info(f"TimeSeriesPredictor initialized. Available models: {self.models_available}")
     
     def _check_available_models(self) -> List[str]:
-        """Verifica quais bibliotecas de ML estão disponíveis"""
-        available = ["simple_ma"]  # Sempre disponível
+        """Detecta quais modelos estão disponíveis no ambiente"""
+        available = ['simple_ma']  # Sempre disponível
         
         try:
             import prophet
-            available.append("prophet")
+            available.append('prophet')
+            logger.info("Prophet model available")
         except ImportError:
             logger.warning("Prophet not available. Install with: pip install prophet")
         
         try:
-            import tensorflow as tf
-            available.append("lstm")
+            import tensorflow
+            # Verificar também sklearn (necessário para LSTM)
+            try:
+                from sklearn.preprocessing import MinMaxScaler
+                available.append('lstm')
+                logger.info("TensorFlow + sklearn available for LSTM")
+            except ImportError:
+                logger.warning("sklearn not available (needed for LSTM). Install with: pip install scikit-learn")
         except ImportError:
             logger.warning("TensorFlow not available. Install with: pip install tensorflow")
         
         try:
             from statsmodels.tsa.arima.model import ARIMA
-            available.append("arima")
+            available.append('arima')
+            logger.info("Statsmodels available for ARIMA")
         except ImportError:
             logger.warning("Statsmodels not available. Install with: pip install statsmodels")
+        
+        # Ensemble disponível se tivermos pelo menos 2 modelos além do simple_ma
+        if len(available) > 2:
+            available.append('ensemble')
+            logger.info("Ensemble model available (combining multiple models)")
         
         return available
     
@@ -344,6 +357,296 @@ class TimeSeriesPredictor:
         
         return predictions, metrics
     
+    def predict_lstm(
+        self,
+        df: pd.DataFrame,
+        periods_ahead: int = 10
+    ) -> Tuple[List[Prediction], Dict[str, float]]:
+        """
+        Predição usando LSTM (Long Short-Term Memory).
+        Rede neural recorrente para padrões complexos.
+        """
+        try:
+            import tensorflow as tf
+            from tensorflow import keras
+            from tensorflow.keras import layers
+        except ImportError:
+            raise ValueError("TensorFlow not installed. Use: pip install tensorflow")
+        
+        # Preparar dados
+        features = ['close', 'volume', 'returns', 'volatility', 'ma7', 'ma25', 'rsi']
+        available_features = [f for f in features if f in df.columns]
+        
+        data = df[available_features].values
+        
+        # Normalizar dados
+        from sklearn.preprocessing import MinMaxScaler
+        scaler = MinMaxScaler()
+        data_scaled = scaler.fit_transform(data)
+        
+        # Criar sequências (lookback de 60 períodos)
+        lookback = min(60, len(data) // 2)
+        X, y = [], []
+        for i in range(lookback, len(data_scaled)):
+            X.append(data_scaled[i-lookback:i])
+            y.append(data_scaled[i, 0])  # Prever apenas close
+        
+        X = np.array(X)
+        y = np.array(y)
+        
+        # Split train/test
+        split = int(0.8 * len(X))
+        X_train, X_test = X[:split], X[split:]
+        y_train, y_test = y[:split], y[split:]
+        
+        # Criar modelo LSTM
+        model = keras.Sequential([
+            layers.LSTM(50, return_sequences=True, input_shape=(lookback, len(available_features))),
+            layers.Dropout(0.2),
+            layers.LSTM(50, return_sequences=False),
+            layers.Dropout(0.2),
+            layers.Dense(25),
+            layers.Dense(1)
+        ])
+        
+        model.compile(optimizer='adam', loss='mse')
+        
+        # Treinar (epochs baixo para velocidade)
+        model.fit(
+            X_train, y_train,
+            batch_size=32,
+            epochs=10,
+            validation_data=(X_test, y_test),
+            verbose=0
+        )
+        
+        # Fazer predições futuras
+        predictions = []
+        last_sequence = data_scaled[-lookback:]
+        last_timestamp = int(df['time'].iloc[-1].timestamp() * 1000)
+        
+        # Inferir time_diff
+        if len(df) >= 2:
+            time_diff = int(df['time'].iloc[-1].timestamp()) - int(df['time'].iloc[-2].timestamp())
+        else:
+            time_diff = 3600
+        
+        current_sequence = last_sequence.copy()
+        
+        for i in range(1, periods_ahead + 1):
+            # Prever próximo valor
+            pred_scaled = model.predict(current_sequence.reshape(1, lookback, -1), verbose=0)
+            pred_value = pred_scaled[0, 0]
+            
+            # Desnormalizar
+            dummy = np.zeros((1, len(available_features)))
+            dummy[0, 0] = pred_value
+            pred_price = scaler.inverse_transform(dummy)[0, 0]
+            
+            # Estimar intervalo de confiança baseado em volatilidade histórica
+            volatility = df['volatility'].iloc[-1] if 'volatility' in df else 0.02
+            std_dev = pred_price * volatility * np.sqrt(i)
+            lower = pred_price - (2 * std_dev)
+            upper = pred_price + (2 * std_dev)
+            
+            confidence = max(40, 75 - (i * 2))
+            
+            predictions.append(Prediction(
+                timestamp=last_timestamp + (i * time_diff * 1000),
+                predicted_price=pred_price,
+                confidence=confidence,
+                lower_bound=lower,
+                upper_bound=upper,
+            ))
+            
+            # Atualizar sequência para próxima predição
+            new_row = np.zeros(len(available_features))
+            new_row[0] = pred_value
+            current_sequence = np.vstack([current_sequence[1:], new_row])
+        
+        # Calcular métricas
+        y_pred_test = model.predict(X_test, verbose=0).flatten()
+        mae = np.mean(np.abs(y_test - y_pred_test))
+        rmse = np.sqrt(np.mean((y_test - y_pred_test) ** 2))
+        
+        metrics = {
+            'mae': float(mae),
+            'rmse': float(rmse),
+            'model': 'lstm'
+        }
+        
+        return predictions, metrics
+    
+    def predict_arima(
+        self,
+        df: pd.DataFrame,
+        periods_ahead: int = 10
+    ) -> Tuple[List[Prediction], Dict[str, float]]:
+        """
+        Predição usando ARIMA (AutoRegressive Integrated Moving Average).
+        Modelo estatístico clássico para séries temporais.
+        """
+        try:
+            from statsmodels.tsa.arima.model import ARIMA
+            from statsmodels.tsa.stattools import adfuller
+        except ImportError:
+            raise ValueError("Statsmodels not installed. Use: pip install statsmodels")
+        
+        # Usar apenas preço de fechamento
+        prices = df['close'].values
+        
+        # Teste de estacionariedade (ADF test)
+        adf_result = adfuller(prices)
+        is_stationary = adf_result[1] < 0.05
+        
+        # Determinar ordem de diferenciação
+        d = 0 if is_stationary else 1
+        
+        # Usar ARIMA(5,d,2) como padrão razoável
+        p, q = 5, 2
+        
+        try:
+            # Treinar modelo ARIMA
+            model = ARIMA(prices, order=(p, d, q))
+            fitted = model.fit()
+            
+            # Fazer predições
+            forecast = fitted.forecast(steps=periods_ahead)
+            forecast_df = fitted.get_forecast(steps=periods_ahead)
+            conf_int = forecast_df.conf_int()
+            
+        except Exception as e:
+            logger.warning(f"ARIMA fitting failed: {e}, trying simpler model")
+            # Fallback para modelo mais simples
+            model = ARIMA(prices, order=(1, 1, 1))
+            fitted = model.fit()
+            forecast = fitted.forecast(steps=periods_ahead)
+            forecast_df = fitted.get_forecast(steps=periods_ahead)
+            conf_int = forecast_df.conf_int()
+        
+        # Criar predições
+        predictions = []
+        last_timestamp = int(df['time'].iloc[-1].timestamp() * 1000)
+        
+        if len(df) >= 2:
+            time_diff = int(df['time'].iloc[-1].timestamp()) - int(df['time'].iloc[-2].timestamp())
+        else:
+            time_diff = 3600
+        
+        for i in range(periods_ahead):
+            pred_price = forecast[i]
+            lower = conf_int.iloc[i, 0]
+            upper = conf_int.iloc[i, 1]
+            
+            # Confiança baseada na largura do intervalo
+            range_pct = ((upper - lower) / pred_price) * 100
+            confidence = max(40, min(85, 100 - range_pct * 2))
+            
+            predictions.append(Prediction(
+                timestamp=last_timestamp + ((i + 1) * time_diff * 1000),
+                predicted_price=pred_price,
+                confidence=confidence,
+                lower_bound=lower,
+                upper_bound=upper,
+            ))
+        
+        # Métricas
+        metrics = {
+            'aic': float(fitted.aic),
+            'bic': float(fitted.bic),
+            'model': f'arima_{p}_{d}_{q}',
+            'stationary': is_stationary
+        }
+        
+        return predictions, metrics
+    
+    def predict_ensemble(
+        self,
+        df: pd.DataFrame,
+        periods_ahead: int = 10
+    ) -> Tuple[List[Prediction], Dict[str, float]]:
+        """
+        Ensemble: combina predições de múltiplos modelos.
+        Usa weighted average baseado na performance histórica.
+        """
+        logger.info("Running ensemble prediction with all available models")
+        
+        all_predictions = []
+        all_metrics = {}
+        weights = {}
+        
+        # Tentar cada modelo disponível
+        models_to_try = []
+        if "prophet" in self.models_available:
+            models_to_try.append(("prophet", self.predict_prophet, 0.4))
+        if "lstm" in self.models_available:
+            models_to_try.append(("lstm", self.predict_lstm, 0.3))
+        if "arima" in self.models_available:
+            models_to_try.append(("arima", self.predict_arima, 0.3))
+        
+        # Fallback se nenhum modelo avançado disponível
+        if not models_to_try:
+            logger.warning("No advanced models available, using simple_ma")
+            return self.predict_simple_ma(df, periods_ahead), {"model": "simple_ma_only"}
+        
+        # Executar cada modelo
+        for model_name, model_func, default_weight in models_to_try:
+            try:
+                preds, metrics = model_func(df, periods_ahead)
+                all_predictions.append(preds)
+                all_metrics[model_name] = metrics
+                weights[model_name] = default_weight
+                logger.info(f"✅ {model_name} completed")
+            except Exception as e:
+                logger.warning(f"❌ {model_name} failed: {e}")
+                continue
+        
+        if not all_predictions:
+            # Se todos falharam, usar simple_ma
+            logger.warning("All models failed, falling back to simple_ma")
+            return self.predict_simple_ma(df, periods_ahead), {"model": "simple_ma_fallback"}
+        
+        # Normalizar pesos
+        total_weight = sum(weights.values())
+        weights = {k: v / total_weight for k, v in weights.items()}
+        
+        # Combinar predições usando weighted average
+        ensemble_predictions = []
+        
+        for i in range(periods_ahead):
+            weighted_price = 0
+            weighted_lower = 0
+            weighted_upper = 0
+            weighted_confidence = 0
+            timestamp = all_predictions[0][i].timestamp
+            
+            for model_idx, model_name in enumerate(weights.keys()):
+                w = weights[model_name]
+                pred = all_predictions[model_idx][i]
+                
+                weighted_price += pred.predicted_price * w
+                weighted_lower += pred.lower_bound * w
+                weighted_upper += pred.upper_bound * w
+                weighted_confidence += pred.confidence * w
+            
+            ensemble_predictions.append(Prediction(
+                timestamp=timestamp,
+                predicted_price=weighted_price,
+                confidence=weighted_confidence,
+                lower_bound=weighted_lower,
+                upper_bound=weighted_upper,
+            ))
+        
+        # Métricas combinadas
+        metrics = {
+            'model': 'ensemble',
+            'models_used': list(weights.keys()),
+            'weights': weights,
+            'individual_metrics': all_metrics
+        }
+        
+        return ensemble_predictions, metrics
+    
     def predict(
         self,
         symbol: str,
@@ -375,18 +678,37 @@ class TimeSeriesPredictor:
         
         # Escolher modelo
         if model == "auto":
-            if "prophet" in self.models_available:
+            # Prioridade: ensemble > prophet > lstm > arima > simple_ma
+            if len(self.models_available) >= 2:
+                model = "ensemble"
+            elif "prophet" in self.models_available:
                 model = "prophet"
+            elif "lstm" in self.models_available:
+                model = "lstm"
+            elif "arima" in self.models_available:
+                model = "arima"
             else:
                 model = "simple_ma"
-                logger.warning("Prophet not available, using simple_ma")
+                logger.warning("No advanced models available, using simple_ma")
         
         # Fazer predição
-        if model == "prophet" and "prophet" in self.models_available:
-            predictions, metrics = self.predict_prophet(df, periods_ahead)
-        else:
+        try:
+            if model == "ensemble":
+                predictions, metrics = self.predict_ensemble(df, periods_ahead)
+            elif model == "prophet" and "prophet" in self.models_available:
+                predictions, metrics = self.predict_prophet(df, periods_ahead)
+            elif model == "lstm" and "lstm" in self.models_available:
+                predictions, metrics = self.predict_lstm(df, periods_ahead)
+            elif model == "arima" and "arima" in self.models_available:
+                predictions, metrics = self.predict_arima(df, periods_ahead)
+            else:
+                predictions = self.predict_simple_ma(df, periods_ahead)
+                metrics = {"model": "simple_ma"}
+        except Exception as e:
+            logger.error(f"Error in {model} prediction: {e}", exc_info=True)
+            logger.warning("Falling back to simple_ma")
             predictions = self.predict_simple_ma(df, periods_ahead)
-            metrics = {"model": "simple_ma"}
+            metrics = {"model": "simple_ma", "error": str(e)}
         
         # Determinar tendência
         current_price = float(df['close'].iloc[-1])

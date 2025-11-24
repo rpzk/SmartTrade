@@ -186,17 +186,20 @@ pip install prophet
 - Lida bem com mudanças de regime
 - Intervalos de confiança confiáveis
 
-### 3. LSTM (Opcional)
+### 3. LSTM (✅ INSTALADO)
 **Como funciona:**
 - Rede neural recorrente (Long Short-Term Memory)
 - Aprende padrões complexos e não-lineares
 - Usa múltiplas features (OHLCV, indicadores técnicos)
 - Treinamento mais pesado
+- Arquitetura: 2 camadas LSTM (50 unidades) + Dropout + Dense
 
-**Instalar:**
+**Instalar (se necessário):**
 ```bash
-pip install tensorflow
+/bin/python3 -m pip install tensorflow --break-system-packages
 ```
+
+**Status:** ✅ TensorFlow já está instalado e disponível!
 
 **Quando usar:**
 - Padrões complexos e não-lineares
@@ -208,17 +211,40 @@ pip install tensorflow
 - Computacionalmente intensivo
 - Pode overfittar
 
-### 4. ARIMA (Opcional)
+### 4. ARIMA (✅ INSTALADO)
 **Como funciona:**
 - Modelo estatístico clássico
 - Auto-Regressive Integrated Moving Average
 - Melhor para dados estacionários
 - Interpretável matematicamente
+- Testa estacionariedade automaticamente (ADF test)
+- Ordem padrão: ARIMA(5,d,2) com d adaptativo
 
-**Instalar:**
+**Instalar (se necessário):**
 ```bash
-pip install statsmodels
+/bin/python3 -m pip install statsmodels --break-system-packages
 ```
+
+**Status:** ✅ Statsmodels já está instalado e disponível!
+
+### 5. Ensemble (✅ DISPONÍVEL)
+**Como funciona:**
+- Combina predições de múltiplos modelos
+- Weighted average baseado em performance
+- Reduz variância e melhora robustez
+- Usa todos os modelos disponíveis automaticamente
+
+**Pesos padrão:**
+- Prophet: 40%
+- LSTM: 30%
+- ARIMA: 30%
+
+**Quando usar:**
+- Predições mais robustas e confiáveis
+- Quando há incerteza sobre qual modelo é melhor
+- Para reduzir risco de overfitting
+
+**Status:** ✅ Automático quando 2+ modelos disponíveis!
 
 **Quando usar:**
 - Dados estacionários (sem tendência forte)
@@ -270,6 +296,40 @@ O sistema cria automaticamente estas features:
 
 ---
 
+## 🧪 Backtesting de Predições
+
+**NOVO! Teste a acurácia dos modelos em dados históricos**
+
+### Via API
+
+**Backtest de um modelo específico:**
+```bash
+curl -X POST "http://localhost:8000/api/predict/backtest?symbol=BTC-USDT&timeframe=1h&model=prophet&limit=1000"
+```
+
+**Comparar todos os modelos:**
+```bash
+curl -X POST "http://localhost:8000/api/predict/backtest/compare?symbol=ETH-USDT&timeframe=4h&limit=1000"
+```
+
+**Métricas retornadas:**
+- **Accuracy**: % de predições corretas (direção)
+- **MAE/RMSE/MAPE**: Erros médios de preço
+- **Win Rate**: % de trades lucrativos
+- **Profit Factor**: Lucro total / Perda total
+- **Total PnL**: Retorno percentual total
+- **Max Drawdown**: Maior perda consecutiva
+- **Sharpe Ratio**: Retorno ajustado ao risco
+
+### Interpretando Resultados
+
+**Accuracy > 60%** = Modelo razoável para direção
+**Win Rate > 50%** = Potencialmente lucrativo
+**Profit Factor > 1.5** = Bom risco/recompensa
+**Sharpe Ratio > 1.0** = Retorno compensador
+
+---
+
 ## 💡 Casos de Uso
 
 ### Caso 1: "Devo entrar em BTC agora?"
@@ -303,21 +363,41 @@ python3 view_prediction.py BTC-USDT 4h 10
 - **Tendência**: Todos concordam?
 - **Variação**: Qual mostra movimento significativo?
 
-### Caso 3: "Prophet é melhor que Simple MA?"
+### Caso 3: "Qual modelo é mais preciso?"
 
+**Opção 1: Comparar predições atuais**
 ```bash
-# Primeiro instale Prophet
-pip install prophet
-
-# Compare modelos
 python3 view_prediction.py ETH-USDT compare
 ```
 
+**Opção 2: Backtest histórico (MELHOR)**
+```bash
+curl -X POST "http://localhost:8000/api/predict/backtest/compare?symbol=ETH-USDT&timeframe=4h" | python3 -m json.tool
+```
+
 **Veja:**
-- Qual modelo prevê maior/menor variação
-- Diferença nas tendências
-- Níveis de confiança
-- Escolha o que fizer mais sentido com sua análise
+- Acurácia histórica de cada modelo
+- Win rate e profit factor
+- Qual modelo teria sido mais lucrativo
+- Escolha baseado em dados reais!
+
+### Caso 4: "Ensemble vale a pena?"
+
+```bash
+# Teste ensemble vs modelos individuais
+curl "http://localhost:8000/api/predict/BTC-USDT?model=ensemble&periods=10"
+```
+
+**Vantagens do Ensemble:**
+- Combina forças de múltiplos modelos
+- Reduz risco de overfitting
+- Mais robusto a mudanças de mercado
+- Geralmente melhor acurácia
+
+**Quando não usar:**
+- Quando um modelo específico historicamente domina
+- Se velocidade é crítica (ensemble é mais lento)
+- Dados insuficientes (< 500 candles)
 
 ---
 
@@ -473,20 +553,19 @@ $ python3 view_prediction.py BTC-USDT 1h 5
 **IMPLEMENTADO:**
 - ✅ Framework de predição extensível
 - ✅ Modelo Simple MA (baseline)
-- ✅ Modelo Prophet (INSTALADO e funcionando!)
-- ✅ Feature engineering completo
-- ✅ API REST endpoints
+- ✅ Modelo Prophet (Facebook Time Series)
+- ✅ Modelo LSTM (Deep Learning - TensorFlow)
+- ✅ Modelo ARIMA (Statistical Model)
+- ✅ Modelo Ensemble (Multi-Model Combination)
+- ✅ Feature engineering completo (10+ features)
+- ✅ API REST endpoints completos
 - ✅ Script CLI de visualização
 - ✅ Dashboard web interativo com gráficos
 - ✅ Detecção de tendências
 - ✅ Intervalos de confiança
+- ✅ Backtesting de predições
+- ✅ Comparação de modelos
 - ✅ Integração completa com Lightweight Charts
-
-**EM DESENVOLVIMENTO:**
-- 🔄 LSTM implementation
-- 🔄 ARIMA implementation
-- 🔄 Ensemble methods
-- 🔄 Dashboard web de predição
 
 **PRONTO PARA USO:** 🚀
 Sistema 100% funcional com Prophet instalado e dashboard web interativo!

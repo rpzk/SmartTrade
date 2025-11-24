@@ -1,6 +1,7 @@
 (function(){
   const $ = id => document.getElementById(id);
   let chart, candleSeries, predictedSeries, upperSeries, lowerSeries;
+  let smcMarkers = []; // Store SMC markers
 
   function createChart(){
     const container = $('chart');
@@ -12,11 +13,67 @@
     });
 
     candleSeries = chart.addCandlestickSeries({upColor:'#10b981',downColor:'#ef4444',wickUpColor:'#10b981',wickDownColor:'#ef4444'});
-    predictedSeries = chart.addLineSeries({color:'#f59e0b',lineWidth:2});
-    upperSeries = chart.addLineSeries({color:'rgba(245,158,11,0.35)',lineWidth:1,lineStyle:2});
-    lowerSeries = chart.addLineSeries({color:'rgba(245,158,11,0.35)',lineWidth:1,lineStyle:2});
+    predictedSeries = chart.addLineSeries({color:'#f59e0b',lineWidth:2,title:'Predição'});
+    upperSeries = chart.addLineSeries({color:'rgba(245,158,11,0.35)',lineWidth:1,lineStyle:2,title:'Upper'});
+    lowerSeries = chart.addLineSeries({color:'rgba(245,158,11,0.35)',lineWidth:1,lineStyle:2,title:'Lower'});
 
     new ResizeObserver(()=>chart.applyOptions({width:container.clientWidth,height:container.clientHeight})).observe(container);
+  }
+  
+  function drawSMCOverlay(smcData){
+    // Clear previous markers
+    if(candleSeries && smcMarkers.length > 0){
+      candleSeries.setMarkers([]);
+      smcMarkers = [];
+    }
+    
+    if(!smcData || !$('show-smc').checked) return;
+    
+    const markers = [];
+    
+    // Order Blocks (top 3)
+    const obs = smcData.order_blocks || [];
+    obs.slice(0,3).forEach((ob,idx)=>{
+      const color = ob.type === 'bullish' ? '#10b981' : '#ef4444';
+      const shape = ob.type === 'bullish' ? 'arrowUp' : 'arrowDown';
+      markers.push({
+        time: Math.floor(ob.time/1000),
+        position: ob.type === 'bullish' ? 'belowBar' : 'aboveBar',
+        color: color,
+        shape: shape,
+        text: `OB ${ob.type.substring(0,4).toUpperCase()}`
+      });
+    });
+    
+    // Fair Value Gaps (top 3)
+    const fvgs = smcData.fair_value_gaps || [];
+    fvgs.slice(0,3).forEach(fvg=>{
+      const color = fvg.type === 'bullish' ? 'rgba(16,185,129,0.6)' : 'rgba(239,68,68,0.6)';
+      markers.push({
+        time: Math.floor(fvg.time/1000),
+        position: fvg.type === 'bullish' ? 'belowBar' : 'aboveBar',
+        color: color,
+        shape: 'circle',
+        text: `FVG`
+      });
+    });
+    
+    // Break of Structure
+    const bos = smcData.break_of_structure || [];
+    bos.slice(-5).forEach(b=>{
+      markers.push({
+        time: Math.floor(b.time/1000),
+        position: b.type === 'bullish' ? 'belowBar' : 'aboveBar',
+        color: '#6366f1',
+        shape: 'square',
+        text: 'BOS'
+      });
+    });
+    
+    smcMarkers = markers;
+    if(candleSeries){
+      candleSeries.setMarkers(markers);
+    }
   }
 
   async function fetchKlines(symbol, interval, limit=500){
@@ -49,12 +106,27 @@
     summary.textContent = txt;
   }
 
+  async function fetchPredictionWithSMC(symbol, interval, periods, model){
+    const showSMC = $('show-smc').checked;
+    if(!showSMC){
+      // Use endpoint simples
+      return await fetchPrediction(symbol, interval, periods, model);
+    }
+    
+    // Use endpoint com SMC
+    const url = `/api/predict/with-smc/${encodeURIComponent(symbol)}?timeframe=${encodeURIComponent(interval)}&periods=${encodeURIComponent(periods)}&model=${encodeURIComponent(model)}`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('Erro ao buscar predição com SMC');
+    return await res.json();
+  }
+
   async function refresh(){
     try{
       const symbol = $('symbol').value || 'BTC-USDT';
       const interval = $('interval').value || '1h';
       const periods = parseInt($('periods').value) || 10;
       const model = $('model').value || 'auto';
+      const showSMC = $('show-smc').checked;
 
       $('btn-refresh').disabled = true; $('btn-refresh').textContent = 'Carregando...';
 
@@ -65,17 +137,43 @@
       // Ensure visible range to include last candles + predicted horizon
       chart.timeScale().fitContent();
 
-      const pred = await fetchPrediction(symbol, interval, periods, model);
-      if(pred && pred.predictions && pred.predictions.length){
-        const mapped = toLineData(pred.predictions);
-        predictedSeries.setData(mapped.line);
-        upperSeries.setData(mapped.up);
-        lowerSeries.setData(mapped.low);
-        showSummary(pred);
+      if(showSMC){
+        // Fetch com SMC integrado
+        const result = await fetchPredictionWithSMC(symbol, interval, periods, model);
+        const pred = result.prediction;
+        
+        if(pred && pred.predictions && pred.predictions.length){
+          const mapped = toLineData(pred.predictions);
+          predictedSeries.setData(mapped.line);
+          upperSeries.setData(mapped.up);
+          lowerSeries.setData(mapped.low);
+          showSummary(pred);
+          
+          // Draw SMC overlay
+          drawSMCOverlay(result.smc);
+          
+          // Show confluence analysis
+          if(result.confluence_analysis && result.confluence_analysis.length > 0){
+            const confluenceText = result.confluence_analysis.map(c=>`${c.type}: ${c.note}`).join(' | ');
+            const summary = $('summary');
+            summary.textContent += ` • Confluência: ${result.confluence_analysis.length} sinais`;
+            summary.title = confluenceText;
+          }
+        }
       } else {
-        predictedSeries.setData([]);
-        upperSeries.setData([]);
-        lowerSeries.setData([]);
+        // Fetch sem SMC
+        const pred = await fetchPrediction(symbol, interval, periods, model);
+        if(pred && pred.predictions && pred.predictions.length){
+          const mapped = toLineData(pred.predictions);
+          predictedSeries.setData(mapped.line);
+          upperSeries.setData(mapped.up);
+          lowerSeries.setData(mapped.low);
+          showSummary(pred);
+        } else {
+          predictedSeries.setData([]);
+          upperSeries.setData([]);
+          lowerSeries.setData([]);
+        }
       }
 
     }catch(e){
@@ -89,6 +187,7 @@
   window.addEventListener('DOMContentLoaded', ()=>{
     // Init elements
     $('btn-refresh').addEventListener('click', refresh);
+    $('show-smc').addEventListener('change', refresh);
     // Try to detect if prophet is available and enable model option
     fetch('/api/predict/BTC-USDT?timeframe=1h&periods=1&model=auto',{method:'GET'}).then(()=>{/*ok*/}).catch(()=>{/*ignore*/});
     // Create chart placeholder

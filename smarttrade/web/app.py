@@ -53,47 +53,11 @@ class MetricsMiddleware(BaseHTTPMiddleware):
         return response
 
 
-app = FastAPI(
-    title="SmartTrade Web",
-    version="0.3.0",
-    description="Interface web para dados reais da BingX (Spot e Swap)"
-)
+from contextlib import asynccontextmanager
 
-# Middlewares para compressão e CORS
-app.add_middleware(GZipMiddleware, minimum_size=1000)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-app.add_middleware(MetricsMiddleware)
-
-static_dir = os.path.join(os.path.dirname(__file__), "static")
-app.mount("/static", StaticFiles(directory=static_dir), name="static")
-
-# Cliente global com connection pool (singleton)
-_client: Optional[BingXClient] = None
-
-
-def get_client() -> BingXClient:
-    """
-    Retorna instância singleton do cliente BingX.
-    
-    Garante que apenas uma instância existe durante toda a vida da aplicação,
-    permitindo reuso de conexões e melhor performance.
-    """
-    global _client
-    if _client is None:
-        logger.info("Initializing BingXClient singleton")
-        _client = BingXClient()
-    return _client
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Inicialização da aplicação"""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Gerencia o ciclo de vida da aplicação (startup/shutdown)"""
     logger.info(
         "Starting SmartTrade Web",
         extra={
@@ -106,10 +70,9 @@ async def startup_event():
     get_client()
     # Inicializa o storage
     get_storage()
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
+    
+    yield
+    
     """Limpeza ao desligar a aplicação"""
     logger.info("Shutting down SmartTrade Web")
     global _client
@@ -120,6 +83,14 @@ async def shutdown_event():
     # Fecha storage
     storage = get_storage()
     storage.close()
+
+
+app = FastAPI(
+    title="SmartTrade Web",
+    version="0.3.0",
+    description="Interface web para dados reais da BingX (Spot e Swap)",
+    lifespan=lifespan
+)
 
 
 # Cache simples em memória com TTL
@@ -658,7 +629,7 @@ async def ws_swap_klines(
     
     last_time: int | None = None
     last_send_ts: float = time.time()
-    keepalive_interval = 20.0  # segundos
+    keepalive_interval = 10.0  # Reduzido para 10s para evitar timeouts de proxy/load balancer
     ws_closed = False
     
     async def safe_send(data: dict) -> bool:
@@ -695,7 +666,8 @@ async def ws_swap_klines(
             
         except Exception as e:
             logger.error(f"Error sending snapshot: {e}")
-            await safe_send({"type": "error", "message": str(e)})
+            # Não envia erro fatal no snapshot, tenta continuar para o loop
+            # await safe_send({"type": "error", "message": str(e)})
 
         # Polling dinâmico baseado no intervalo
         # Intervalos menores = polling mais frequente
@@ -720,7 +692,7 @@ async def ws_swap_klines(
         while True:
             # Dorme pequenos intervalos para intercalar keepalive
             sleep_left = poll_delay
-            step = min(keepalive_interval / 2, 5.0)
+            step = min(keepalive_interval / 2, 2.0) # Step menor para verificar keepalive mais frequentemente
             while sleep_left > 0:
                 await asyncio.sleep(min(step, sleep_left))
                 sleep_left -= step
@@ -740,8 +712,10 @@ async def ws_swap_klines(
             try:
                 latest = await asyncio.to_thread(fetch_latest)
             except Exception as e:
-                logger.error(f"Error fetching latest klines: {e}")
-                await safe_send({"type": "error", "message": str(e)})
+                # Erros transientes (rede, timeout da BingX) são normais.
+                # Apenas logamos como warning e tentamos novamente no próximo ciclo.
+                # Não enviamos erro ao cliente para evitar desconexão ou alertas visuais desnecessários.
+                logger.warning(f"Transient error fetching klines (will retry): {e}")
                 continue
 
             if not latest:
@@ -1375,9 +1349,13 @@ async def api_compare_prediction_models(
         
         def _get_best_model(results: Dict) -> str:
             """Determina qual modelo teve melhor performance"""
-            # Por enquanto, prioriza prophet se disponível
+            # Por enquanto, prioriza ensemble > prophet > lstm
+            if "ensemble" in results and "error" not in results["ensemble"]:
+                return "ensemble"
             if "prophet" in results and "error" not in results["prophet"]:
                 return "prophet"
+            if "lstm" in results and "error" not in results["lstm"]:
+                return "lstm"
             return "simple_ma"
         
         result = await asyncio.to_thread(run_comparison)
@@ -1391,6 +1369,272 @@ async def api_compare_prediction_models(
         
     except Exception as e:
         logger.exception(f"Error in model comparison: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/predict/backtest")
+async def api_backtest_prediction_model(
+    symbol: str = Query(..., description="Símbolo do ativo"),
+    timeframe: str = Query("1h", description="Timeframe"),
+    model: str = Query("auto", description="Modelo para testar"),
+    limit: int = Query(1000, ge=500, le=1440, description="Candles para backtest"),
+    prediction_horizon: int = Query(5, ge=1, le=20, description="Períodos de predição"),
+):
+    """
+    Backtesting de modelo de predição em dados históricos.
+    
+    Testa acurácia e lucratividade de seguir as predições do modelo.
+    """
+    try:
+        from ..prediction_backtest import PredictionBacktester
+        
+        logger.info(f"Prediction backtest requested for {symbol} {timeframe} model={model}")
+        
+        def run_backtest():
+            client = get_client()
+            backtester = PredictionBacktester()
+            
+            # Buscar dados históricos
+            klines = client.swap_klines(symbol, timeframe, limit)
+            
+            if len(klines) < 500:
+                raise ValueError(f"Insufficient data for backtest: {len(klines)} candles")
+            
+            # Executar backtest
+            result = backtester.backtest_model(
+                symbol=symbol,
+                timeframe=timeframe,
+                klines=klines,
+                model=model,
+                prediction_horizon=prediction_horizon,
+            )
+            
+            return result.to_dict()
+        
+        result = await asyncio.to_thread(run_backtest)
+        
+        logger.info(
+            f"Prediction backtest completed for {symbol}",
+            extra={
+                "accuracy": result["accuracy"],
+                "win_rate": result["win_rate"],
+                "total_pnl": result["total_pnl"]
+            }
+        )
+        
+        return JSONResponse(content=result)
+        
+    except Exception as e:
+        logger.exception(f"Error in prediction backtest: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/predict/with-smc/{symbol}")
+async def api_predict_with_smc(
+    symbol: str,
+    timeframe: str = Query("1h", description="Timeframe"),
+    periods: int = Query(10, ge=1, le=50, description="Períodos a prever"),
+    model: str = Query("auto", description="Modelo"),
+    limit: int = Query(500, ge=100, le=1440, description="Candles"),
+):
+    """
+    Predição com análise SMC integrada.
+    
+    Retorna predições + Order Blocks + FVG + Fibonacci para confluência.
+    """
+    try:
+        from ..prediction import TimeSeriesPredictor
+        from ..smc_indicators import SMCAnalyzer
+        from ..fibonacci import FibonacciAnalyzer
+        
+        logger.info(f"Prediction + SMC requested for {symbol} {timeframe}")
+        
+        def run_analysis():
+            client = get_client()
+            
+            # Buscar dados
+            klines = client.swap_klines(symbol, timeframe, limit)
+            
+            if len(klines) < 100:
+                raise ValueError(f"Insufficient data: {len(klines)} candles")
+            
+            # 1. Fazer predição
+            predictor = TimeSeriesPredictor()
+            prediction_result = predictor.predict(
+                symbol=symbol,
+                timeframe=timeframe,
+                klines=klines,
+                periods_ahead=periods,
+                model=model
+            )
+            
+            # 2. Análise SMC
+            smc_analyzer = SMCAnalyzer(swing_length=5)
+            smc_result = smc_analyzer.analyze(klines)
+            
+            # 3. Fibonacci
+            fibo_analyzer = FibonacciAnalyzer()
+            fibo_retracements = fibo_analyzer.calculate_auto_retracements(klines, lookback=100)
+            
+            # Combinar tudo
+            result = {
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "prediction": prediction_result.to_dict(),
+                "smc": smc_result,
+                "fibonacci": {
+                    "retracements": [r.to_dict() for r in fibo_retracements],
+                },
+                "confluence_analysis": _analyze_confluence(
+                    prediction_result,
+                    smc_result,
+                    fibo_retracements
+                ),
+            }
+            
+            return result
+        
+        def _analyze_confluence(pred_result, smc_result, fibo_list):
+            """Analisa confluência entre predição e SMC"""
+            confluences = []
+            
+            last_pred = pred_result.predictions[-1] if pred_result.predictions else None
+            if not last_pred:
+                return confluences
+            
+            predicted_price = last_pred.predicted_price
+            trend = pred_result.trend.value
+            
+            # Checar Order Blocks próximos
+            obs = smc_result.get("order_blocks", [])
+            for ob in obs[:5]:  # Top 5 OBs
+                ob_mid = (ob["high"] + ob["low"]) / 2
+                distance_pct = abs((predicted_price - ob_mid) / predicted_price) * 100
+                
+                if distance_pct < 5:  # Dentro de 5%
+                    confluences.append({
+                        "type": "order_block",
+                        "direction": ob["type"],
+                        "price_range": [ob["low"], ob["high"]],
+                        "distance_pct": round(distance_pct, 2),
+                        "strength": "strong" if distance_pct < 2 else "medium",
+                        "note": f"Predição próxima a Order Block {ob['type']}"
+                    })
+            
+            # Checar FVGs
+            fvgs = smc_result.get("fair_value_gaps", [])
+            for fvg in fvgs[:5]:
+                fvg_mid = (fvg["high"] + fvg["low"]) / 2
+                distance_pct = abs((predicted_price - fvg_mid) / predicted_price) * 100
+                
+                if distance_pct < 5:
+                    confluences.append({
+                        "type": "fvg",
+                        "direction": fvg["type"],
+                        "price_range": [fvg["low"], fvg["high"]],
+                        "distance_pct": round(distance_pct, 2),
+                        "strength": "medium",
+                        "note": f"Predição próxima a Fair Value Gap {fvg['type']}"
+                    })
+            
+            # Checar Fibonacci
+            for fibo in fibo_list[:1]:  # Apenas o mais recente
+                for level in fibo.levels:
+                    distance_pct = abs((predicted_price - level.price) / predicted_price) * 100
+                    
+                    if distance_pct < 2:  # Muito próximo
+                        confluences.append({
+                            "type": "fibonacci",
+                            "level": level.ratio,
+                            "price": level.price,
+                            "distance_pct": round(distance_pct, 2),
+                            "strength": "strong",
+                            "note": f"Predição próxima a Fibonacci {level.ratio}"
+                        })
+            
+            return confluences
+        
+        result = await asyncio.to_thread(run_analysis)
+        
+        logger.info(
+            f"Prediction + SMC completed for {symbol}",
+            extra={
+                "trend": result["prediction"]["trend"],
+                "confluences": len(result["confluence_analysis"])
+            }
+        )
+        
+        return JSONResponse(content=result)
+        
+    except Exception as e:
+        logger.exception(f"Error in prediction + SMC: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/predict/backtest/compare")
+async def api_compare_backtest_models(
+    symbol: str = Query(..., description="Símbolo do ativo"),
+    timeframe: str = Query("1h", description="Timeframe"),
+    limit: int = Query(1000, ge=500, le=1440, description="Candles para backtest"),
+):
+    """
+    Compara backtesting de todos os modelos disponíveis.
+    
+    Mostra qual modelo tem melhor acurácia e lucratividade.
+    """
+    try:
+        from ..prediction_backtest import PredictionBacktester
+        
+        logger.info(f"Prediction backtest comparison for {symbol} {timeframe}")
+        
+        def run_comparison():
+            client = get_client()
+            backtester = PredictionBacktester()
+            
+            # Buscar dados
+            klines = client.swap_klines(symbol, timeframe, limit)
+            
+            if len(klines) < 500:
+                raise ValueError(f"Insufficient data: {len(klines)} candles")
+            
+            # Comparar todos os modelos
+            results = backtester.compare_models(
+                symbol=symbol,
+                timeframe=timeframe,
+                klines=klines,
+            )
+            
+            # Converter para dict
+            results_dict = {
+                model: result.to_dict()
+                for model, result in results.items()
+            }
+            
+            # Determinar melhor modelo
+            best_model = max(
+                results_dict.items(),
+                key=lambda x: x[1].get("accuracy", 0) + x[1].get("win_rate", 0)
+            )[0] if results_dict else None
+            
+            return {
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "models_tested": len(results_dict),
+                "results": results_dict,
+                "best_model": best_model,
+            }
+        
+        result = await asyncio.to_thread(run_comparison)
+        
+        logger.info(
+            f"Backtest comparison completed for {symbol}",
+            extra={"best_model": result["best_model"]}
+        )
+        
+        return JSONResponse(content=result)
+        
+    except Exception as e:
+        logger.exception(f"Error in backtest comparison: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
